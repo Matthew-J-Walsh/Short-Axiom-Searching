@@ -1,3 +1,5 @@
+ 22.49 KB
+
 import numpy as np
 import os
 import copy
@@ -5,11 +7,12 @@ import sys
 import itertools
 import re
 from datetime import datetime
-
+ 
 from TautologyChecking import *
 from PolishFormUtilities import *
-
-
+from Models import *
+ 
+ 
 #counter_axiom = 'i(i(i(X,Y),i(o,Z)),i(U,i(i(Z,X),i(V,i(W,X)))))' #C1 old
 #counter_axiom = 'i(i(i(i(i(X,Y),i(Z,o)),U),V),i(i(V,X),i(Z,X)))' #C0?
 #counter_axiom = 'i(i(i(X,Y),i(Z,i(o,U))),i(i(U,X),i(Z,i(V,X))))'
@@ -20,12 +23,12 @@ from PolishFormUtilities import *
 #counter_axiom = 'i(i(i(X,Y),i(o,Z)),i(U,i(i(Z,X),i(V,i(W,X)))))' #C1 old
 #counter_axiom = 'i(i(i(i(i(X,Y),i(Z,o)),U),V),i(i(V,X),i(Z,X)))' #C0?
 #counter_axiom = 'i(i(i(X,Y),i(Z,i(o,U))),i(i(U,X),i(Z,i(V,X))))'
-
-
+ 
+ 
 def Run_Vampire_Elimination(input_file_folder, input_file_name, counter_formulas, type_, **kwargs):
     """
     Runs the vampire elimination process in its entirity.
-    
+ 
     Parameters:
     input_file_folder: the folder where the input file is
     input_file_name: name of the input file in the folder
@@ -33,7 +36,7 @@ def Run_Vampire_Elimination(input_file_folder, input_file_name, counter_formulas
     Only the last one will be used for the individual files in the subfolder.
     type_: \'N\', \'0\', \'1\', or \'O\'. Indicates what type of model to expect. \'N\'
     indicates that its a CN model. All the rest indicate its a C0 or C1 model.
-    
+ 
     Returns:
     Nothing.
     Makes a new file in the input_file_folder that countains the same lines as the 
@@ -47,15 +50,15 @@ def Run_Vampire_Elimination(input_file_folder, input_file_name, counter_formulas
     print("There are "+str(count_remaining(input_file_folder+input_file_name[:-4]+"-CounterModels"+str(len(counter_formulas)-1)+".txt"))+" formulas remaining to be eliminated, creating subfolder and files")
     dump_remaning_into_file(input_file_folder+input_file_name[:-4]+"-CounterModels"+str(len(counter_formulas)-1)+".txt", input_file_folder+"specialcases"+input_file_name[:-4]+"-Remaining.txt")
     seperate_formula_into_files(input_file_folder+"specialcases"+input_file_name[:-4]+"-Remaining.txt", input_file_folder+"specialcases"+input_file_name[:-4], counter_formulas[-1], **kwargs)
-    
-
+ 
+ 
 def generate_polish_form(fof_form, **kwargs):
     """
     Generates the polish form of a fof formula.
-    
+ 
     Parameters:
     fof_form: fof formula
-    
+ 
     Returns:
     polish version of fof formula
     """
@@ -63,14 +66,14 @@ def generate_polish_form(fof_form, **kwargs):
     if 'polish_to_fof_translation' in kwargs.keys():
         polish_to_fof_translation = kwargs['polish_to_fof_translation']
     else:
-        polish_to_fof_translation = {"E": "=", "C": ('i', 2), "D": ('d', 2), "N": ('n', 1), "O", "o"}
+        polish_to_fof_translation = {"E": "=", "C": ('i', 2), "D": ('d', 2), "N": ('n', 1), "O": "o"}
     for entry in polish_to_fof_translation:
         if type(entry[1])==type(()):
             k = entry[1][0]
         else:
             k = entry[1]
         fof_to_polish_translation.append({k: entry[0]})
-        
+ 
     fof_stripped = fof_form.replace("(", "").replace(")", "").replace(",", "")
     polish = ""
     for c in fof_stripped:
@@ -78,18 +81,18 @@ def generate_polish_form(fof_form, **kwargs):
             polish.append(fof_to_polish_translation[c])
         else:
             polish.append(str(ord(c)-ord("A")))
-            
+ 
     return polish
-    
-
+ 
+ 
 def generate_fof_form(polish, **kwargs):
     """
     Generates the fof form of a polish formula.
     Raises consecutive ValueErrors if input is not polish.
-    
+ 
     Parameters:
     polish: polish formula
-    
+ 
     Returns:
     fof version of polish formula
     """
@@ -97,39 +100,44 @@ def generate_fof_form(polish, **kwargs):
         fof_vars_list = kwargs['fof_vars_list']
     else:
         fof_vars_list = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J"]
-    
+ 
     if 'polish_to_fof_translation' in kwargs.keys():
         polish_to_fof_translation = kwargs['polish_to_fof_translation']
     else:
-        polish_to_fof_translation = {"E": "=", "C": ('i', 2), "D": ('d', 2), "N": ('n', 1), "O", "o"}
-        
+        polish_to_fof_translation = {"E": "=", "C": ('i', 2), "D": ('d', 2), "N": ('n', 1), "O": "o"}
+ 
     return generate_fof_form_helper(polish, fof_vars_list, polish_to_fof_translation)
-        
+ 
+fof_vars_list = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L"]
+ 
 def generate_fof_form_helper(polish, fof_vars_list, polish_to_fof_translation):
     try:
-        if polish_to_fof_translation[polish[0]]=="=":
+        if polish[0] not in polish_to_fof_translation.keys():
+            return fof_vars_list[int(polish)]
+        elif polish_to_fof_translation[polish[0]]=="=":
             p = split_along_value(polish)
             return generate_fof_form_helper(p[0], fof_vars_list, polish_to_fof_translation)\
               +"="+generate_fof_form_helper(p[1], fof_vars_list, polish_to_fof_translation)
         elif type(polish_to_fof_translation[polish[0]])==type(""):
             return polish_to_fof_translation[polish[0]]
         elif type(polish_to_fof_translation[polish[0]])==type(()):
-            p = split_along_value(polish, polish_to_fof_translation[polish[0]][1])
-            return polish_to_fof_translation[polish[0]][0]+"("+\
-                generate_fof_form_helper(p[0], fof_vars_list, polish_to_fof_translation)+","+\
-                generate_fof_form_helper(p[1], fof_vars_list, polish_to_fof_translation)
-            
+            p = split_along_value(polish)
+            out = polish_to_fof_translation[polish[0]][0]+"("
+            for ps in p:
+                out += generate_fof_form_helper(ps, fof_vars_list, polish_to_fof_translation)+","
+            return out[:-1]
+ 
         raise ValueError("Unknown Element in polish_to_fof_translation")
     except:
         raise ValueError(polish)
-
+ 
 def get_fof_form_vars(fof_form, **kwargs):
     """
     Returns the list of vars in a fof form.
-    
+ 
     Parameters:
     fof_form: The fof form
-    
+ 
     Returns:
     List of variables used in formula
     """
@@ -137,26 +145,26 @@ def get_fof_form_vars(fof_form, **kwargs):
         disallowed_symbols = kwargs['disallowed_symbols']
     else:
         disallowed_symbols = ['i', 'n', '=', 'd', 't', 'o', '(', ')', ',']
-        
+ 
     var_list = []
     for c in fof_form:
         if c not in disallowed_symbols:
             if c not in var_list:
                 var_list.append(c)
     return var_list
-
+ 
 def generate_fof_test_file_text(polishes, fof_counter_formula, **kwargs):
     """
     Generates the text to place in a fof file to (atempt to) disprove a 
     set of polish formulas' ability to be an axiom system.
-    
+ 
     Parameters:
     polishes: List of polish formulas that make up the axioms of a logic.
     fof_counter_formula: Usually a tautology/axiom of a logic system, the
     conjecture that it will be shown cannot be derived from the axioms given.
     system_constants: The constants in the axiom system, in the form of a list.
     equational: Is the axiom system equational or not
-    
+ 
     Returns:
     File text for an fof file that will be used to either prove or disprove 
     a set of polish formulas' ability to be an axiom system.
@@ -164,23 +172,23 @@ def generate_fof_test_file_text(polishes, fof_counter_formula, **kwargs):
     file = ''
     system_constants = []
     equational = False
-    
+ 
     if 'polish_to_fof_translation' in kwargs.keys():
         for ptft in kwargs['polish_to_fof_translation'].values():
             if type(ptft)==type(0) and ptft!="=":
                 system_constants.append(ptft)
         if "=" in kwargs['polish_to_fof_translation'].values():
             equational = True
-                
+ 
     if not equational:
         file = 'fof(mp,axiom, ![X,Y]: ((t(X) & t(i(X,Y))) => t(Y))).\n' #MP
         file += 'fof(counter, conjecture, ![X,Y,Z,U,V]: t('+fof_counter_formula+')).\n'
     else:
         file = 'fof(counter, conjecture, ![X,Y,Z,U,V]: '+fof_counter_formula+').\n'
-    
+ 
     for constant in system_constants:
         file += 'fof(const, axiom, t('+constant+')).\n'
-        
+ 
     i = 0
     for polish in polishes:
         fof_form = generate_fof_form(polish, **kwargs)
@@ -193,18 +201,18 @@ def generate_fof_test_file_text(polishes, fof_counter_formula, **kwargs):
                     +']: '+fof_form+').\n'
         i += 1
     return file
-
+ 
 def generate_fof_test_file(polishes, file_name, fof_counter_formula, **kwargs):
     """
     Generates an fof test file. See generate_fof_test_file_text for more details.
-    
+ 
     Parameters:
     polishes: List of polish formulas that make up the axioms of a logic.
     fof_counter_formula: Usually a tautology/axiom of a logic system, the
     conjecture that it will be shown cannot be derived from the axioms given.
     system_constants: The constants in the axiom system, in the form of a list.
     equational: Is the axiom system equational or not
-    
+ 
     Returns:
     File name of created file.
     """
@@ -213,19 +221,19 @@ def generate_fof_test_file(polishes, file_name, fof_counter_formula, **kwargs):
     with open(file_name, "w") as f:
         f.write(generate_fof_test_file_text(polishes, fof_counter_formula, **kwargs))
     return file_name
-    
+ 
 def run_fof_test_on_formula(lines, 
         fof_counter_formula='i(i(i(i(i(X,Y),i(n(Z),n(U))),Z),V),i(i(V,X),i(U,X)))',
         verify_model=False, **kwargs):
     """
     Runs a set of lines in a file through vampire, each line is a potential axiom system.
-    
+ 
     Parameters:
     lines: lines to run through vampire
     fof_counter_formula: the counter formula to be used, in fof form
     verify_model: whether or not to verify the model after it is found, only really used for
         double checking/debugging
-    
+ 
     Returns:
     The model, if one was found, otherwise None
     """
@@ -237,15 +245,15 @@ def run_fof_test_on_formula(lines,
     for l in lines:
         for s in l.split(","):
             polishes.append(s.strip())
-    generate_fof_test_file(polishes, file_name, fof_counter_formula, system_constants=system_constants, equational=equational)
+    generate_fof_test_file(polishes, file_name, fof_counter_formula, **kwargs)
     time = 240
-    if vampire_time in kwargs.keys():
-        time = kwargs[vampire_time]
+    if "vampire_time" in kwargs.keys():
+        time = kwargs["vampire_time"]
     out_read = os.popen('./vampire --mode casc_sat -t '+str(time)+' --fmb_start_size 2 '+file_name)
     out = out_read.read()
-    if system_constants:
+    if False:
         out = out.replace(",o", ",fmb_$i_1").replace("o,", "fmb_$i_1,").replace(" = o", " = fmb_$i_1").replace("(o)", "(fmb_$i_1)")
-        
+ 
     if "Finite Model Found!" in out:
         #print(out)
         try:
@@ -253,7 +261,7 @@ def run_fof_test_on_formula(lines,
         except:
             print(out)
             raise ValueError("Hmm")
-            
+ 
         #Verify model actually works
         #This looks like a mess but its actually really nice output
         if verify_model:
@@ -269,23 +277,23 @@ def run_fof_test_on_formula(lines,
                     raise ValueError(out)
             if check_against_model(generate_polish_form(fof_counter_formula), model):
                 print("It worked on the counterformula wut?")
-        
+ 
         os.remove(file_name)
         return True, seq #change me
     else:
         os.remove(file_name)
         return False, None #change me
-
+ 
 def readnextIncompleteLine(file, nfile, write_new_file=True):
     """
     Reads the next line of a file that doesn't already have a model (indicating that its
     been disproven)
-    
+ 
     Parameters:
     file: main file
     nfile: new file being made
     write_new_file: if one needs to write to the new file
-    
+ 
     Returns:
     The next line without a model
     """
@@ -295,27 +303,27 @@ def readnextIncompleteLine(file, nfile, write_new_file=True):
             nfile.write(line)
         line = file.readline()
     return line
-    
-
+ 
+ 
 def progressive_filtering(input_file_name, output_file_name, file_folder, type_,
-        fof_counter_formula='i(i(i(i(i(X,Y),i(n(Z),n(U))),Z),V),i(i(V,X),i(U,X)))', **kwargs)
+        fof_counter_formula='i(i(i(i(i(X,Y),i(n(Z),n(U))),Z),V),i(i(V,X),i(U,X)))', **kwargs):
     """
     Progressivly filters a file of lines of potential axioms with a counter formula.
-    
+ 
     Parameters:
     input_file_name: file of lines of potential axioms
     output_file_name: file to output filtered axioms
     file_folder: folder were the files are located
     type_: type of system this is
     fof_counter_formula: counter formula to base filtering off of
-    
+ 
     Returns:
     Nothing. Creates the file file_folder+output_file_name and fills it line by line
     with lines from the input_file_name with ":" + model if there is a counter model.
     """
     models = []
     model_seqs = []
-    
+ 
     with open(file_folder+"temp_"+output_file_name, 'w') as nfile:
         with open(file_folder+input_file_name, 'r') as file:
             line = readnextIncompleteLine(file, nfile)
@@ -330,12 +338,12 @@ def progressive_filtering(input_file_name, output_file_name, file_folder, type_,
                 if not modeled:
                     b, seq = run_fof_test_on_formula([line], fof_counter_formula=fof_counter_formula, **kwargs)
                     if not b:
-                        nfile.write(l)
+                        nfile.write(line)
                     else:
-                        nfile.write(l.strip()+":"+seq+"\n")
-                    model_seqs.append(seq)
-                    models.append(model_from_string(seq, type_))
-    
+                        nfile.write(line.strip()+":"+seq+"\n")
+                        model_seqs.append(seq)
+                        models.append(model_from_string(seq, type_))
+ 
     with open(file_folder+output_file_name, 'w') as ofile:
         with open(file_folder+"temp_"+output_file_name, 'a') as file:
             line = readnextIncompleteLine(file, ofile)
@@ -350,20 +358,20 @@ def progressive_filtering(input_file_name, output_file_name, file_folder, type_,
                 if not modeled:
                     ofile.write(line)
                 line = readnextIncompleteLine(file, ofile)
-    
+ 
     os.remove(file_folder+"temp_"+output_file_name)
-    
+ 
 def verify_dual_file_integrity(fileAname, fileBname, type_):
     """
     Verify's that two files refer to the same list of axiom systems.
     Raises error if they dont
-    
+ 
     Parameters:
     fileAname: name of first file
     fileBname: name of second file
     type_: \'N\', \'0\', \'1\', or \'O\'. Indicates what type of model to expect. \'N\'
     indicates that its a CN model. All the rest indicate its a C0 or C1 model.
-    
+ 
     Return:
     Nothing. Raises errors if the files aren't the same.
     """
@@ -407,17 +415,17 @@ def verify_dual_file_integrity(fileAname, fileBname, type_):
                         raise ValueError("Wrong seq")
                 lineA = fileA.readline().strip()
                 lineB = fileB.readline().strip()
-
+ 
 def verify_single_file_integrity(filename, type_, forcefill=False):
     """
     Checks that a single file is properly formed and has consistent models
-    
+ 
     Parameters:
     filename: name of file
     type_: \'N\', \'0\', \'1\', or \'O\'. Indicates what type of model to expect. \'N\'
     indicates that its a CN model. All the rest indicate its a C0 or C1 model.
     forcefill: should an error be thrown when there is an line without a model?
-    
+ 
     Returns
     Nothing. Raises errors if the file not correct
     """
@@ -434,14 +442,14 @@ def verify_single_file_integrity(filename, type_, forcefill=False):
                 if forcefill:
                     raise ValueError("Not filled")
             line = file.readline().strip()
-                
+ 
 def count_remaining(filename):
     """
     Count how many potential axiom sets remain in a file.
-    
+ 
     Parameters:
     filename: name of file
-    
+ 
     Returns:
     How many lines there arn't counter examples for
     """
@@ -454,16 +462,16 @@ def count_remaining(filename):
             c += 1
     print(str(c)+" remaining in file: "+filename)
     return c
-
+ 
 def seperate_formula_into_files(basefile, target_directory, counter_axiom, **kwargs):
     """
     Seperates the formulas in one file into the individual files in the target directory.
-    
+ 
     Parameters:
     basefile: file from which to draw formulas from
     target_directory: directory to place individual formula files into
     counter_axiom: counter axiom to use in individual files
-    
+ 
     Returns:
     Nothing. Seperates the remaining (no counter models) formulas into individual files in the
     target directory.
@@ -476,8 +484,8 @@ def seperate_formula_into_files(basefile, target_directory, counter_axiom, **kwa
             with open(target_directory+line.strip()+".p", 'w') as nf:
                 nf.write(content)
             line = bfile.readline()
-
-def dump_remaning_into_file(file_name, outfile_name):\
+ 
+def dump_remaning_into_file(file_name, outfile_name):
     """
     Dump remaining formulas (no counter examples) to a new file. Usually done before using
     seperate_formula_into_files and then running each file individually.
@@ -490,7 +498,7 @@ def dump_remaning_into_file(file_name, outfile_name):\
                     polish = line.strip()
                     ofile.write(polish+'\n')
                 line = file.readline()
-
+ 
 domain_regex = re.compile("tff\(declare_\$i(\d+)")
 i_regex = re.compile("(i\(fmb_\$i_\d+,fmb_\$i_\d+\) = fmb_\$i_\d+)")
 i_regex_vals = re.compile("i\(fmb_\$i_(\d+),fmb_\$i_(\d+)\) = fmb_\$i_(\d+)")
@@ -500,16 +508,16 @@ t_regex = re.compile("(\s~?)t\(fmb_\$i_(\d+)\)")
 def get_vampire_model(vampire_txt, type_):
     """
     Generates a model from a vampire output file.
-    
+ 
     Parameters:
     vampire_txt: text of the vampire file
     type_: \'N\', \'0\', \'1\', or \'O\'. Indicates what type of model to expect. \'N\'
     indicates that its a CN model. All the rest indicate its a C0 or C1 model.
-    
+ 
     Returns:
     Sequence representing the model from the vampire file.
     """
-    
+ 
     domainreses = domain_regex.findall(vampire_txt)
     domainsize = len(domainreses)
     for d in domainreses:
@@ -527,17 +535,17 @@ def get_vampire_model(vampire_txt, type_):
         for nr in nreses:
             nrvals = n_regex_vals.findall(nr)
             n_functional_values.append(nrvals[0])
-        
+ 
         return get_model_sequence([domainsize, i_functional_values, n_functional_values, treses], type_)
     return get_model_sequence([domainsize, i_functional_values, treses], type_)
-    
+ 
 def get_model_sequence(info, type_):
     """
     Turns info into a model sequence. See get_vampire_model.
-    
+ 
     Parameters:
     See get_vampire_model
-    
+ 
     Returns:
     See get_vampire_model
     """
@@ -559,9 +567,5 @@ def get_model_sequence(info, type_):
     if type_=='N':
         for i in range(domainsize):
             sequence += str(int(n_function[i][1]) - 1)
-        
+ 
     return sequence
-
-
-
-
