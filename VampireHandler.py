@@ -1,5 +1,3 @@
- 22.49 KB
-
 import numpy as np
 import os
 import copy
@@ -44,9 +42,16 @@ def Run_Vampire_Elimination(input_file_folder, input_file_name, counter_formulas
     folder in the input_file_folder countaining a file for each of formulas without 
     counter examples.
     """
+    if type_=="CN":
+        polish_to_fof_translation = {"C": ('i', 2), "D": ('d', 2), "N": ('n', 1)}
+    elif type_=="C0" or type_=="CO" or type_=="C1":
+        polish_to_fof_translation = {"C": ('i', 2), "D": ('d', 2), "N": ('n', 1), "O": "o"}
+    elif 'polish_to_fof_translation' not in kwargs.keys():
+        raise ValueError("type not supported")
+    
     for i in range(len(counter_formulas)):
         progressive_filtering(input_file_name, input_file_name[:-4]+"-CounterModels"+str(i)+".txt", 
-            input_file_folder, type, fof_counter_formula=counter_formulas[i], **kwargs)
+            input_file_folder, type, fof_counter_formula=counter_formulas[i], **dict(kwargs, polish_to_fof_translation=polish_to_fof_translation))
     print("There are "+str(count_remaining(input_file_folder+input_file_name[:-4]+"-CounterModels"+str(len(counter_formulas)-1)+".txt"))+" formulas remaining to be eliminated, creating subfolder and files")
     dump_remaning_into_file(input_file_folder+input_file_name[:-4]+"-CounterModels"+str(len(counter_formulas)-1)+".txt", input_file_folder+"specialcases"+input_file_name[:-4]+"-Remaining.txt")
     seperate_formula_into_files(input_file_folder+"specialcases"+input_file_name[:-4]+"-Remaining.txt", input_file_folder+"specialcases"+input_file_name[:-4], counter_formulas[-1], **kwargs)
@@ -174,6 +179,7 @@ def generate_fof_test_file_text(polishes, fof_counter_formula, **kwargs):
     equational = False
  
     if 'polish_to_fof_translation' in kwargs.keys():
+        print(kwargs['polish_to_fof_translation'])
         for ptft in kwargs['polish_to_fof_translation'].values():
             if type(ptft)==type(0) and ptft!="=":
                 system_constants.append(ptft)
@@ -200,6 +206,8 @@ def generate_fof_test_file_text(polishes, fof_counter_formula, **kwargs):
             file += 'fof(cand'+str(i)+', axiom, !['+var_list[0]+''.join([','+c for c in var_list[1:]])\
                     +']: '+fof_form+').\n'
         i += 1
+    print(file)
+    raise ValueError(fof_counter_formula)
     return file
  
 def generate_fof_test_file(polishes, file_name, fof_counter_formula, **kwargs):
@@ -249,6 +257,8 @@ def run_fof_test_on_formula(lines,
     time = 240
     if "vampire_time" in kwargs.keys():
         time = kwargs["vampire_time"]
+    if not os.path.exists("vampire"):
+        raise ValueError("No vampire file, please rename to \'vampire\'")
     out_read = os.popen('./vampire --mode casc_sat -t '+str(time)+' --fmb_start_size 2 '+file_name)
     out = out_read.read()
     if False:
