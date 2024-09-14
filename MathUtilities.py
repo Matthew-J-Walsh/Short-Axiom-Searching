@@ -1,31 +1,57 @@
-import scipy
-import scipy.special
+from Globals import *
 
-def binomial(n, k):
-    """
-    Binomial coefficient.
-    """
+def binomial(n: int, k: int) -> int:
+    """Exact binomial coefficient.
+
+    Parameters
+    ----------
+    n : int
+    k : int
+
+    Returns
+    -------
+    int
+        Integer binomial coefficient
+    """    
     return int(scipy.special.comb(n, k, exact=True))
     
-def catalan(n):
-    """
-    Catalan numbers. A000108
+@functools.cache
+def catalan(n: int) -> int:
+    """The nth Catalan number. https://oeis.org/A000108
+
+    Parameters
+    ----------
+    n : int
+        Index
+
+    Returns
+    -------
+    int
+        The nth Catalan number
     """
     return binomial(2*n, n) - binomial(2*n, n+1)
 
-bells_memo = [1]
-def bells(n):
-    """
-    Bells numbers. A000110
-    """
-    global bells_memo
-    if len(bells_memo)>n:
-        return bells_memo[n]
+@functools.cache
+def bells(n: int) -> int:
+    """The nth Bell number. https://oeis.org/A000110
+
+    Parameters
+    ----------
+    n : int
+        Index
+
+    Returns
+    -------
+    int
+        The nth Bell number
+    """    
+    if n == 0:
+        return 1
     v = 0
     for k in range(0, n):
         v += binomial(n-1, k) * bells(k)
-    bells_memo += [v]
     return v
+
     
     
     
