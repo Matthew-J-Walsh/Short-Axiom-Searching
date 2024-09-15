@@ -359,7 +359,8 @@ class TreeForm:
             else:
                 assert fill.size == polish.count("_")
                 i = -1
-                return ''.join([VARIABLE_SYMBOLS[(i := i + 1)] if c == "_" else c for c in polish])
+                fill_dims = fill_dimensions(fill)
+                return ''.join([VARIABLE_SYMBOLS[fill_dims[(i := i + 1)]] if c == "_" else c for c in polish])
         
         def vampire(self, fill: Fill | None = None) -> str:
             """Get the vampire expression this node represents
@@ -383,7 +384,8 @@ class TreeForm:
             else:
                 assert fill.size == self._vampire_cache.count("_")
                 i = -1
-                return ''.join([VAMPIRE_VARIABLE_SYMBOLS[(i := i + 1)] if c == "_" else c for c in self._vampire_cache])
+                fill_dims = fill_dimensions(fill)
+                return ''.join([VAMPIRE_VARIABLE_SYMBOLS[fill_dims[(i := i + 1)]] if c == "_" else c for c in self._vampire_cache])
             
         def get_iterator(self, external_degeneracy: CountArray) -> Iterable[TreeForm.Node]:
             """Yields iterations self until self.iterate() returns False.
@@ -415,33 +417,53 @@ class TreeForm:
             int
                 How many unsolved expressions were added to the remaining file
             """            
-            unsolved_count = 0
 
             var_count: int = self.counts[-1]
             full_target_evaluation: ModelArray = self.calculate(model_table.target_model, FullFill(var_count))
-            full_cm_evals: dict[Model, ModelArray] = {}
+
             cleaver = Cleaver(var_count)
+            cleaver *= fill_result_disassembly(full_target_evaluation)
+
+            for cm in model_table.counter_models:
+                cleaver *= (1 - fill_result_disassembly(self.calculate(cm, FullFill(var_count))))
+            
             for i, fill in enumerate(fill_iterator(var_count)):
                 if cleaver[i]:
-                    if not apply_fill_to_cache(full_target_evaluation, fill_dimensions(fill))[0].all():
-                        #assert 
-                        cleaver *= fill_downward_cleave(i, var_count)
-                    for cm in model_table.counter_models:
-                        if not cm in full_cm_evals.keys():
-                            full_cm_evals[cm] = self.calculate(cm, FullFill(var_count))
-                        if apply_fill_to_cache(full_cm_evals[cm], fill_dimensions(fill))[0].all():
-                            cleaver *= fill_upward_cleave(i, var_count)
-                if cleaver[i]:
-                    vampire_result: bool | Model = vampire_wrapper(self.vampire(fill))
+                    vamp: str = self.vampire(fill)
+                    assert model_table.target_model("t("+vamp+")"), vamp+"\n"+str(i)+"\n"+str(fill)
+                    vampire_result: bool | Model = vampire_wrapper(vamp)
                     if vampire_result==False:
                         remaining_file.write(self.vampire(fill)+"\n")
-                        unsolved_count += 1
                     else:
                         assert isinstance(vampire_result, Model), "Vampire wrapper shouldn't return True, only models or false."
                         model_table += vampire_result
-                        cleaver *= fill_upward_cleave(i, var_count)
+                        cleaver *= (1 - fill_result_disassembly(self.calculate(vampire_result, FullFill(var_count))))
+                else:
+                    vamp: str = self.vampire(fill)
+                    assert not model_table.target_model("t("+vamp+")"), vamp+"\n"+str(i)+"\n"+str(fill)
+
+            #full_cm_evals: dict[Model, ModelArray] = {}
+            #cleaver = Cleaver(var_count)
+            #for i, fill in enumerate(fill_iterator(var_count)):
+            #    if cleaver[i]:
+            #        if not apply_fill_to_cache(full_target_evaluation, fill_dimensions(fill))[0].all():
+            #            #assert 
+            #            cleaver *= fill_downward_cleave(i, var_count)
+            #        for cm in model_table.counter_models:
+            #            if not cm in full_cm_evals.keys():
+            #                full_cm_evals[cm] = self.calculate(cm, FullFill(var_count))
+            #            if apply_fill_to_cache(full_cm_evals[cm], fill_dimensions(fill))[0].all():
+            #                cleaver *= fill_upward_cleave(i, var_count)
+            #    if cleaver[i]:
+            #        vampire_result: bool | Model = vampire_wrapper(self.vampire(fill))
+            #        if vampire_result==False:
+            #            remaining_file.write(self.vampire(fill)+"\n")
+            #        else:
+            #            assert isinstance(vampire_result, Model), "Vampire wrapper shouldn't return True, only models or false."
+            #            model_table += vampire_result
+            #            cleaver *= fill_upward_cleave(i, var_count)
             
-            return unsolved_count
+            return cleaver.sum()
     
     class PsudeoNode(Node):
         """A PsudeoNode acts like a Node but actually just indexes a known list of every possible node of that length 

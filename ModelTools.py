@@ -343,7 +343,31 @@ class Model():
 
     def _get_values(self, vampire_form: str) -> list[OperationSpec | ConstantSpec | int]:
         stripped: str = vampire_form.replace('(', '').replace(')', '').replace(',', '')
-        raise NotImplementedError
+        out: list[OperationSpec | ConstantSpec | int] = []
+        var_table: dict[str, int] = {}
+        i = 0
+        for c in stripped:
+            found: bool = False
+            for op in self.operation_definitions.keys():
+                if op.vampire_symbol==c:
+                    out.append(op)
+                    found = True
+                    break
+            if found:
+                continue
+            for cons in self.constant_definitions.keys():
+                if cons.vampire_symbol==c:
+                    out.append(cons)
+                    found = True
+                    break
+            if found:
+                continue
+            if not c in var_table.keys():
+                var_table[c] = i
+                i += 1
+            out.append(var_table[c])
+
+        return out
 
     def compile_expression(self, vampire_form: str) -> list[CompiledElement | int | None]:
         """Compiles the compression into a more easily managed form
@@ -366,8 +390,7 @@ class Model():
             print(vampire_form)
             raise AssertionError
         function_stack: list[FunctionStackElement] = [FunctionStackElement(values[0], [values[0].arity], [])] #prefix arity
-        var_count = max(v for v in values if isinstance(v, int)) + 1
-        variable_indicies: dict[int, int] = {i+1: i for i in range(var_count)}
+        var_count: int = max(v for v in values if isinstance(v, int)) + 1
         cons_list: list[ConstantSpec] = list(self.constant_definitions.keys())
         constant_indicies: dict[ConstantSpec, int] = {c: i+var_count for i, c in enumerate(cons_list)}
         compiled: list[CompiledElement | int | None] = [None] * var_count + [self.constant_definitions[c] for c in cons_list] # type: ignore
@@ -380,7 +403,7 @@ class Model():
                 if isinstance(value, ConstantSpec):
                     function_stack[-1].inpt_tab.append(constant_indicies[value])
                 else: #variable
-                    function_stack[-1].inpt_tab.append(variable_indicies[value])
+                    function_stack[-1].inpt_tab.append(value)
                 function_stack[-1].rem_inpts[0] -= 1
 
                 while function_stack[-1].rem_inpts[0]==0:

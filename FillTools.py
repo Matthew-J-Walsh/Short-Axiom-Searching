@@ -12,13 +12,13 @@ class Fill(NamedTuple):
 
 class FillTable(NamedTuple):
     fills: np.ndarray
-    surjective_cleaves: np.ndarray
+    subsumptive_cleaves: np.ndarray
 
     @staticmethod
     def get_fill_table(size: int) -> FillTable:
         #raise Warning("Depreciated")
         _initialize_fill_table(size)
-        return FillTable(_fill_table_fills[:size, :bells(size)], _fill_table_surjective_table[:bells(size), :bells(size)])
+        return FillTable(_fill_table_fills[:size, :bells(size)], _fill_table_subsumptive_table[:bells(size), :bells(size)])
 
 def _fill_injection(A: np.ndarray[Any, np.dtype[np.int8]], B: np.ndarray[Any, np.dtype[np.int8]]) -> dict[int, int] | Literal[False]:
     mapping: dict[int, int] = {}
@@ -30,16 +30,16 @@ def _fill_injection(A: np.ndarray[Any, np.dtype[np.int8]], B: np.ndarray[Any, np
             mapping[a] = b
     return mapping
 
-def _generate_surjective_table_dumb(count: int, arr: np.ndarray) -> np.ndarray:
-    surjective_table = np.zeros((arr.shape[0], arr.shape[0]), dtype=np.int8)
+def _generate_subsumptive_table_dumb(count: int, arr: np.ndarray) -> np.ndarray:
+    subsumptive_table = np.zeros((arr.shape[0], arr.shape[0]), dtype=np.int8)
 
-    surjective_table[0, 0] = 1
+    subsumptive_table[0, 0] = 1
     for i, j in itertools.product(range(arr.shape[0]), repeat=2):
-        surjective_table[i, j] = 1 if _fill_injection(arr[j], arr[i]) else 0
+        subsumptive_table[i, j] = 1 if _fill_injection(arr[j], arr[i]) else 0
     
-    return surjective_table
+    return subsumptive_table
 
-def _generate_surjective_table_pseudo(count: int, arr: np.ndarray) -> np.ndarray:
+def _generate_subsumptive_table_pseudo(count: int, arr: np.ndarray) -> np.ndarray:
     #tab(i,j)==1 iff arr[i] being non-tautological implies arr[j] is non-tautological
     #contrapositively: tab(i,j)==1 iff arr[j] being tautological implies arr[i] is tautological
     #decided by: tab(i,j)==1 iff arr[j] has an injection to arr[i]
@@ -48,10 +48,10 @@ def _generate_surjective_table_pseudo(count: int, arr: np.ndarray) -> np.ndarray
     #When we find a form that is standardly-tautological and has no counter-models, we toss it to vampire
     #If vampire finds something, we add that counter-model, letting us cleave, otherwise we skip and add it to a file of "unclassified formula"
     splits = np.array([bells(i) for i in range(count+1)], dtype=np.int8)
-    surjective_table = np.identity(arr.shape[0], dtype=np.int8)
+    subsumptive_table = np.identity(arr.shape[0], dtype=np.int8)
 
     print(splits)
-    surjective_table[0, 0] = 1
+    subsumptive_table[0, 0] = 1
     for i in range(1, len(splits)-1):
         for j in range(splits[i], splits[i+1]-1):
             m = arr[j].max()
@@ -60,18 +60,18 @@ def _generate_surjective_table_pseudo(count: int, arr: np.ndarray) -> np.ndarray
             #print(arr[splits[m-1]-1])
             for k in range(splits[m-1]-1, splits[m]):
                 if _fill_injection(arr[j], arr[k]):
-                    surjective_table[k, j] = 1
-                    surjective_table[:, j] += surjective_table[:, k]
-        surjective_table[:splits[i+1]-1, splits[i+1]-1] = 1
-    surjective_table[:splits[-1]-1, splits[-1]-1] = 1
+                    subsumptive_table[k, j] = 1
+                    subsumptive_table[:, j] += subsumptive_table[:, k]
+        subsumptive_table[:splits[i+1]-1, splits[i+1]-1] = 1
+    subsumptive_table[:splits[-1]-1, splits[-1]-1] = 1
     
-    surjective_table = (surjective_table!=0).astype(int)
+    subsumptive_table = (subsumptive_table!=0).astype(int)
 
-    return surjective_table
+    return subsumptive_table
 
-def _check_surjective_table(count: int, arr: np.ndarray) -> None:
-    pseudo = _generate_surjective_table_pseudo(count, arr)
-    dumb = _generate_surjective_table_dumb(count, arr)
+def _check_subsumptive_table(count: int, arr: np.ndarray) -> None:
+    pseudo = _generate_subsumptive_table_pseudo(count, arr)
+    dumb = _generate_subsumptive_table_dumb(count, arr)
     try:
         assert (pseudo == dumb).all()
     except:
@@ -95,10 +95,10 @@ def _add_with_carry(arr: np.ndarray) -> np.ndarray:
         return np.concatenate((_add_with_carry(arr[:-1]), np.array([0])))
 
 _fill_table_fills: np.ndarray = np.zeros((0, 0))
-_fill_table_surjective_table: np.ndarray = np.zeros((0, 0))
+_fill_table_subsumptive_table: np.ndarray = np.zeros((0, 0))
 
 def _initialize_fill_table(size: int) -> None:
-    global _fill_table_fills, _fill_table_surjective_table
+    global _fill_table_fills, _fill_table_subsumptive_table
     if _fill_table_fills.shape[0] < size:
         fills = np.zeros((bells(size), size), dtype=np.int8)
         current = fills[0]
@@ -107,13 +107,13 @@ def _initialize_fill_table(size: int) -> None:
             fills[i] = current
         
         #fills = fills + 1
-        surjective_table = (1 - _generate_surjective_table_dumb(size, fills)).astype(np.bool_) #subtact 1 so that 0s are on cleaved values
+        subsumptive_table = (1 - _generate_subsumptive_table_dumb(size, fills)).astype(np.bool_) #subtact 1 so that 0s are on cleaved values
         fills = fills.T
         fills.setflags(write=False)
-        surjective_table.setflags(write=False)
+        subsumptive_table.setflags(write=False)
         
         _fill_table_fills = fills
-        _fill_table_surjective_table = surjective_table
+        _fill_table_subsumptive_table = subsumptive_table
 
 def fill_iterator(size: int) -> Iterable[Fill]:
     _initialize_fill_table(size)
@@ -154,14 +154,14 @@ def FullFill(size: int) -> Fill:
 def fill_downward_cleave(i: int, size: int) -> np.ndarray:
     #Cleave from non-tautological discovery at index i
     #Returns 0 on cleaved elements
-    assert i < _fill_table_surjective_table.shape[0], str(i) + ", " + str(_fill_table_surjective_table.shape)
-    return _fill_table_surjective_table[i, :bells(size)]
+    assert i < _fill_table_subsumptive_table.shape[0], str(i) + ", " + str(_fill_table_subsumptive_table.shape)
+    return _fill_table_subsumptive_table[i, :bells(size)]
 
 def fill_upward_cleave(i: int, size: int) -> np.ndarray:
     #Cleave from tautological discovery at index i
     #Returns 0 on cleaved elements
-    assert i < _fill_table_surjective_table.shape[1]
-    return _fill_table_surjective_table[:bells(size), i]
+    assert i < _fill_table_subsumptive_table.shape[1]
+    return _fill_table_subsumptive_table[:bells(size), i]
 
 def Fillin(expression: np.ndarray, arr: np.ndarray) -> np.ndarray:
     assert len(expression.shape)==1, expression.shape
@@ -170,7 +170,37 @@ def Fillin(expression: np.ndarray, arr: np.ndarray) -> np.ndarray:
     result[expression==0] = arr
     return result.T
 
+@functools.cache
+def _point_to_fill_cached(fill: tuple[int, ...]) -> int:
+    point_arr = np.array(fill)
+    for i in range(bells(point_arr.shape[0])):
+        if (_fill_table_fills[-point_arr.shape[0]:, i] == point_arr).all():
+            return i
+    raise RuntimeError("Unabled find row for fill "+str(fill)+" possibly not normalized.")
 
+def _point_to_fill(fill: np.ndarray) -> Fill:
+    first_val: int = fill[0]
+    cut: int = 0
+    while cut + 1 < fill.shape[0] and fill[cut + 1] == first_val:
+        cut += 1
+    fill = fill[cut:]
 
+    fixed_point: list[int] = []
+    conversion: dict[int, int] = {}
+    next_val = 0
+    for i in range(fill.shape[0]):
+        if not fill[i] in conversion.keys():
+            conversion[fill[i]] = next_val
+            next_val += 1
+        fixed_point.append(conversion[fill[i]])
+    return Fill(_point_to_fill_cached(tuple(fixed_point)), fill.shape[0])
+
+def fill_result_disassembly(evaluation: ModelArray) -> np.ndarray:
+    falses = np.vstack(np.logical_not(evaluation).nonzero())
+    cleaver = Cleaver(evaluation.ndim)
+    for i in range(falses.shape[1]):
+        cleaver *= fill_downward_cleave(_point_to_fill(falses[:, i]).point, evaluation.ndim)
+
+    return cleaver
 
 
