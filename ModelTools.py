@@ -216,6 +216,7 @@ class VampireOutputTools:
     variable_regex: re.Pattern = re.compile(r"tff\(declare_\$i(\d+),type,(\w+|\bfmb_\$i_\d+\b):\$i\)")
     function_def_regex: re.Pattern = re.compile(r"tff\(declare_(\w+),type,\1: (\$i(?: \* \$i)*) > \$i\)")
     function_val_regex: re.Pattern = re.compile(r"(\w)\(fmb_\$i_(\d+)(?:,fmb_\$i_(\d+))?\) = fmb_\$i_(\d+)")
+    predicate_val_regex: re.Pattern = re.compile(r"(~?)(\w+)\(fmb_\$i_(\d+)\)")
     #TODO: Predicates
 
     @staticmethod
@@ -261,7 +262,7 @@ class VampireOutputTools:
             assert arities[m[0]] == m[1].count(r"$i")
     
     @staticmethod
-    def function_parse(result: str, function_identifier: str, order: int, arity: int) -> np.ndarray:
+    def function_parse(result: str, function_identifier: str, order: int, arity: int, predicate: bool) -> np.ndarray:
         """Parses a function out of a vampire output
 
         Parameters
@@ -273,21 +274,35 @@ class VampireOutputTools:
         order : int
             Order of the model
         arity : int
-            Ariuty of the function
+            Arity of the function
+        predicate : bool
+            Is this function a predicate (returns a boolean) or a true function (returns a value)
 
         Returns
         -------
         np.ndarray
             _description_
         """        
-        arr = np.full([order]*arity, -1, np.int8)
-        matches = re.findall(VampireOutputTools.function_val_regex, result)
-        for m in matches:
-            if m[0]==function_identifier:
-                assert len(m)-2 == arity, "Incorrect arity assignment found."
-                arr[tuple(int(i) for i in m[1:-1])] = np.int8(m[-1])
-        assert (arr==-1).sum() == 0, "Not all outputs were bound."
-        return arr
+        if predicate:
+            arr = np.full([order]*arity, 1, np.bool_)
+            matches = re.findall(VampireOutputTools.predicate_val_regex, result)
+            for m in matches:
+                if m[1]==function_identifier:
+                    assert len(m)-2 == arity, "Incorrect arity assignment found."
+                    if len(m[0])==0:
+                        arr[tuple(int(i)-1 for i in m[2:])] = True
+                    else: #elif len(m[0])==1:
+                        arr[tuple(int(i)-1 for i in m[2:])] = False
+            return arr
+        else:
+            arr = np.full([order]*arity, -1, np.int8)
+            matches = re.findall(VampireOutputTools.function_val_regex, result)
+            for m in matches:
+                if m[0]==function_identifier:
+                    assert len(m)-2 == arity, "Incorrect arity assignment found."
+                    arr[tuple(int(i)-1 for i in m[1:-1])] = np.int8(m[-1])
+            assert (arr==-1).sum() == 0, "Not all outputs were bound.\n"+str(arr)
+            return arr
 
 class Model():
     """A model to check logical expressions.
@@ -323,7 +338,7 @@ class Model():
                 self.operation_definitions = {}
                 VampireOutputTools.functions_arity_verification(result, {op.vampire_symbol: op.arity for op in spec.operators})
                 for op in spec.operators:
-                    self.operation_definitions[op] = VampireOutputTools.function_parse(result, op.vampire_symbol, order, op.arity)
+                    self.operation_definitions[op] = VampireOutputTools.function_parse(result, op.vampire_symbol, order, op.arity, op.default_table.dtype == np.bool_)
         else:
             self.operation_definitions = {op: op.default_table for op in spec.operators}
             self.constant_definitions = {c: c.default_value for c in spec.constants}
@@ -379,7 +394,8 @@ class Model():
 
         Returns
         -------
-        TODO
+        list[CompiledElement | int | None]
+            A compiled version for easy calculation
         """        
         values: list[OperationSpec | ConstantSpec | int] = self._get_values(vampire_form)
         try:
@@ -491,9 +507,7 @@ class Model():
                 shape[i] = self.order
                 results.append(np.arange(self.order).reshape(shape))
             elif isinstance(func, int):
-                shape = [1] * var_count
-                shape[i] = self.order
-                results.append(np.full(self.order, func).reshape(shape))
+                results.append(np.array(func))
             else:
                 results.append(func.table[*[results[j] for j in func.inputs]])
         
