@@ -287,7 +287,7 @@ class VampireOutputTools:
         arr = np.full([order]*arity, 1, np.bool_ if predicate else np.int8)
         for m in matches:
             if m[0]==function_identifier:
-                inputs = tuple([int(re.search(r"fmb_\$i_(\d+)", g).group(1)) - 1 for g in m[1].split(',')])
+                inputs = tuple([int(re.search(r"fmb_\$i_(\d+)", g).group(1)) - 1 for g in m[1].split(',')]) # type: ignore
                 assert len(inputs) == arity, "Incorrect arity assignment found."
                 if predicate:
                     if len(m[0])==0:
@@ -571,7 +571,6 @@ class ModelTable():
             i = 0
             for filename in os.listdir(counter_model_folder):
                 file_path = os.path.join(counter_model_folder, filename)
-                print(file_path)
                 
                 if os.path.isfile(file_path):
                     i += 1

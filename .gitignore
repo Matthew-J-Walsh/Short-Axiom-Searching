@@ -5,3 +5,7 @@ test_excess.txt
 *.out
 *.p
 test_pass.txt
+pozay.py
+/theorem_provers
+/CNRemaining
+/CNCounterModels
