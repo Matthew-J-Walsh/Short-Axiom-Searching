@@ -3,7 +3,7 @@ from ModelTools import *
 
 import subprocess
 
-_VAMPIRE_MODUS_PONENS = "((t(X) & t(i(X,Y))) => t(Y)))"
+_VAMPIRE_MODUS_PONENS = "((t(X) & t(i(X,Y))) => t(Y))"
 
 class VampireWrapper(Protocol):
     def __call__(self, vampire_form: str) -> bool | Model:
@@ -14,7 +14,7 @@ def BLANK_VAMPIRE_WRAPPER(vampire_form: str) -> bool | Model:
 
 def vampire_expression_to_fof_line(expression: str, name: str, type: Literal["axiom"] | Literal["conjecture"]) -> str:
     vars: set[str] = {c for c in expression if c in VAMPIRE_VARIABLE_SYMBOLS}
-    return 'fof('+name+", "+type+", "+"!["+','.join(vars)+"]: "+expression+".\n"
+    return 'fof('+name+", "+type+", "+"!["+','.join(vars)+"]: "+expression+").\n"
 
 def _generate_vampire_input_file(vampire_form: str, counter_model_set: list[str]) -> str:
     file_name: str = "vampire_run_"+str(datetime.now())
@@ -33,16 +33,20 @@ def _generate_vampire_input_file(vampire_form: str, counter_model_set: list[str]
     return file_name
 
 def save_countermodel(result: str, folder: str) -> str:
-    _, size, _ = VampireOutputTools.order_and_constants(result)
-    base_file_name: str = "countermodel-"+str(size)+"-"
-    c: int = 0
-    while True:
-        file_name: str = os.path.join(folder, base_file_name + str(c))
-        if not os.path.exists(file_name):
-            with open(file_name, 'w') as counter_model_file:
-                counter_model_file.write(result)
-                return file_name
-        c += 1
+    try:
+        _, size, _ = VampireOutputTools.order_and_constants(result)
+        base_file_name: str = "countermodel-"+str(size)+"-"
+        c: int = 0
+        while True:
+            file_name: str = os.path.join(folder, base_file_name + str(c))
+            if not os.path.exists(file_name):
+                with open(file_name, 'w') as counter_model_file:
+                    counter_model_file.write(result)
+                    return file_name
+            c += 1
+    except:
+        print(result)
+        raise RuntimeError
 
 def create_vampire_countermodel_instance(executable_file: str, counter_model_sets: list[list[str]], counter_model_folder: str, model_spec: ModelSpec,
                                          optional_args: dict[str, str] | None = None, optional_flags: list[str] | None = None, verify_models: bool = False) -> VampireWrapper:
@@ -67,8 +71,8 @@ def create_vampire_countermodel_instance(executable_file: str, counter_model_set
         Function that calculates counter-models
     """    
     baseline_args = {
-        "--mode": "casc_sat",
-        "-t": "240"
+        "-t": "240",
+        "-sa": "fmb",
     }
     if optional_args:
         full_args: dict[str, str] = {**baseline_args, **optional_args}
@@ -89,6 +93,9 @@ def create_vampire_countermodel_instance(executable_file: str, counter_model_set
         command.append(val)
 
     assert not "--fmb_start_size" in command, "--fmb_start_size is iterated on, don't give as input please"
+
+    if not os.path.exists(counter_model_folder):
+        os.makedirs(counter_model_folder)
     
     def vampire_wrapper(vampire_form: str) -> bool | Model:
         for fmb_start_size in range(2, 8):
@@ -97,16 +104,18 @@ def create_vampire_countermodel_instance(executable_file: str, counter_model_set
 
                 result: str = subprocess.run(command + ["--fmb_start_size", str(fmb_start_size)] + [input_file_name], capture_output=True, text=True).stdout
 
-                os.remove(input_file_name)
-
                 if not "Finite Model Found!" in result:
+                    #print(result)
+                    #raise ValueError()
                     continue
                 else:
                     model: Model = Model(model_spec, model_filename=save_countermodel(result, counter_model_folder))
                     if verify_models:
                         assert model(vampire_form), str(model)+"\n"+vampire_form
-                    
+
+                    os.remove(input_file_name)
                     return model
+                
                 
         return False
 

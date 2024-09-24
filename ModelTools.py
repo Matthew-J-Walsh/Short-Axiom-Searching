@@ -213,11 +213,11 @@ def array_dimensional_reorganizer(target_size: int, current: tuple[int, ...]) ->
 class VampireOutputTools:
     """Tools to process a vampire finite model
     """    
-    variable_regex: re.Pattern = re.compile(r"tff\(declare_\$i(\d+),type,(\w+|\bfmb_\$i_\d+\b):\$i\)")
-    function_def_regex: re.Pattern = re.compile(r"tff\(declare_(\w+),type,\1: (\$i(?: \* \$i)*) > \$i\)")
-    function_val_regex: re.Pattern = re.compile(r"(\w)\(fmb_\$i_(\d+)(?:,fmb_\$i_(\d+))?\) = fmb_\$i_(\d+)")
-    predicate_val_regex: re.Pattern = re.compile(r"(~?)(\w+)\(fmb_\$i_(\d+)\)")
-    #TODO: Predicates
+    variable_regex: re.Pattern = re.compile(r"tff\('declare_\$i(\d+)',type,(\w|'\bfmb_\$i_\d+\b'):\$i\)")
+    function_def_regex: re.Pattern = re.compile(r"tff\(declare_(\w),type,\1: \((\$i(?: \* \$i)*)\) > \$i\)")
+    function_val_regex: re.Pattern = re.compile(r"(\w)\(([^)\s]+)\)\s*=\s*'fmb_\$i_(\d+)'")#(\w)\('fmb_\$i_(\d+)'(?:,'fmb_\$i_(\d+)')?\) = 'fmb_\$i_(\d+)'
+    function_input_regex: re.Pattern = re.compile(r"fmb_\$i_(\d+)")
+    predicate_val_regex: re.Pattern = re.compile(r"(~?)(\w)\('fmb_\$i_(\d+)'\)")
 
     @staticmethod
     def order_and_constants(result: str) -> tuple[str, int, dict[str, int]]:
@@ -242,7 +242,7 @@ class VampireOutputTools:
         constants: dict[str, int] = {c: i for i, (_, c) in enumerate(matches) if len(c)==1}
 
         for symbol, value in constants.items():
-            result = re.sub(r'\b'+re.escape(symbol)+r'\b', "fmb_$i_"+str(value + 1), result)
+            result = re.sub(r'\b'+re.escape(symbol)+r'\b', "'fmb_$i_"+str(value + 1)+"'", result)
 
         return result, order, constants
 
@@ -283,26 +283,21 @@ class VampireOutputTools:
         np.ndarray
             _description_
         """        
-        if predicate:
-            arr = np.full([order]*arity, 1, np.bool_)
-            matches = re.findall(VampireOutputTools.predicate_val_regex, result)
-            for m in matches:
-                if m[1]==function_identifier:
-                    assert len(m)-2 == arity, "Incorrect arity assignment found."
+        matches = re.findall(VampireOutputTools.predicate_val_regex if predicate else VampireOutputTools.function_val_regex, result)
+        arr = np.full([order]*arity, 1, np.bool_ if predicate else np.int8)
+        for m in matches:
+            if m[0]==function_identifier:
+                inputs = tuple([int(re.search(r"fmb_\$i_(\d+)", g).group(1)) - 1 for g in m[1].split(',')])
+                assert len(inputs) == arity, "Incorrect arity assignment found."
+                if predicate:
                     if len(m[0])==0:
-                        arr[tuple(int(i)-1 for i in m[2:])] = True
+                        arr[inputs] = True
                     else: #elif len(m[0])==1:
-                        arr[tuple(int(i)-1 for i in m[2:])] = False
-            return arr
-        else:
-            arr = np.full([order]*arity, -1, np.int8)
-            matches = re.findall(VampireOutputTools.function_val_regex, result)
-            for m in matches:
-                if m[0]==function_identifier:
-                    assert len(m)-2 == arity, "Incorrect arity assignment found."
-                    arr[tuple(int(i)-1 for i in m[1:-1])] = np.int8(m[-1])
-            assert (arr==-1).sum() == 0, "Not all outputs were bound.\n"+str(arr)
-            return arr
+                        arr[inputs] = False
+                else:
+                    arr[inputs] = np.int8(m[-1]) - 1
+        #assert (arr==-1).sum() == 0, "Not all outputs were bound.\n"+str(arr)
+        return arr
 
 class Model():
     """A model to check logical expressions.
@@ -563,7 +558,7 @@ class ModelTable():
     target_model: Model
     counter_models: list[Model]
 
-    def __init__(self, spec: ModelSpec, target_model: Model | None = None, counter_model_folder: str | None = "counter_models") -> None:
+    def __init__(self, spec: ModelSpec, target_model: Model | None = None, counter_model_folder: str | None = None) -> None:
         self.spec = spec
         if not target_model is None:
             self.target_model = target_model
@@ -573,11 +568,16 @@ class ModelTable():
         if not counter_model_folder is None:
             if not os.path.exists(counter_model_folder):
                 os.makedirs(counter_model_folder)
+            i = 0
             for filename in os.listdir(counter_model_folder):
                 file_path = os.path.join(counter_model_folder, filename)
+                print(file_path)
                 
                 if os.path.isfile(file_path):
+                    i += 1
                     self += Model(self.spec, model_filename=file_path)
+            
+            print("Recovered "+str(i)+" models.")
     
     def __iadd__(self, new_model: Model | str) -> ModelTable:
         """Adds a new model in
