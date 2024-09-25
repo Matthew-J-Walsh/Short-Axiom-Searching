@@ -284,20 +284,24 @@ class VampireOutputTools:
             _description_
         """        
         matches = re.findall(VampireOutputTools.predicate_val_regex if predicate else VampireOutputTools.function_val_regex, result)
-        arr = np.full([order]*arity, 1, np.bool_ if predicate else np.int8)
+        arr = np.full([order]*arity, -1, np.int8)
+        func_id_idx = 1 if predicate else 0
         for m in matches:
-            if m[0]==function_identifier:
-                inputs = tuple([int(re.search(r"fmb_\$i_(\d+)", g).group(1)) - 1 for g in m[1].split(',')]) # type: ignore
-                assert len(inputs) == arity, "Incorrect arity assignment found."
+            if m[func_id_idx]==function_identifier:
                 if predicate:
+                    inputs = tuple([int(m[2]) - 1 for g in m[2].split(',')])
+                    assert len(inputs) == arity, "Incorrect arity assignment found."
                     if len(m[0])==0:
-                        arr[inputs] = True
+                        arr[inputs] = 1
                     else: #elif len(m[0])==1:
-                        arr[inputs] = False
+                        arr[inputs] = 0
                 else:
+                    inputs = tuple([int(re.search(r"fmb_\$i_(\d+)", g).group(1)) - 1 for g in m[1].split(',')]) # type: ignore
+                    assert len(inputs) == arity, "Incorrect arity assignment found."
                     arr[inputs] = np.int8(m[-1]) - 1
-        #assert (arr==-1).sum() == 0, "Not all outputs were bound.\n"+str(arr)
-        return arr
+        assert (arr==-1).sum() == 0, "Not all outputs were bound.\n"+str(arr)+"\nIdent: "+str(function_identifier)+"\nMatches: "+str([m for m in matches])+\
+                "\nResult: "+result
+        return arr.astype(np.bool_) if predicate else arr
 
 class Model():
     """A model to check logical expressions.
@@ -509,7 +513,7 @@ class Model():
         return bool(results[-1].all())#, np.argwhere(results[-1]==0)
     
     def __call__(self, vampire_form: str, compiled: list[CompiledElement | int | None] | None = None,
-                           probability: Union[Literal["Likely"], Literal["Slow"], Literal["Verify"], Literal["Fastest"]] = "Verify") -> bool:
+                           probability: Union[Literal["Likely"], Literal["Slow"], Literal["Verify"], Literal["Fastest"]] = "Fastest") -> bool:
         """Checks if an expression is tautological
 
         Parameters
@@ -622,6 +626,27 @@ class ModelTable():
             return "T"
         except:
             raise RuntimeError(vampire_form)
+        
+    def verify_counter_model_sets(self, counter_modeling_formula_sets: list[list[str]]) -> None:
+        """Checks if some sets of counter modeling formulas actually work with this model table.
+        This means that all elements are tautological, and for all countermodels in this model table
+        atleast 1 formula is non-tautological.
+
+        Parameters
+        ----------
+        counter_modeling_formula_sets : list[list[str]]
+            _description_
+        """        
+        for counter_modeling_formula_set in counter_modeling_formula_sets:
+            for model in counter_modeling_formula_set:
+                assert self.target_model(model)
+        for counter_model in self.counter_models:
+            valid_cm = False
+            for counter_modeling_formula_set in counter_modeling_formula_sets:
+                for model in counter_modeling_formula_set:
+                    if not counter_model(model):
+                        valid_cm = True
+            assert valid_cm
     
 
 

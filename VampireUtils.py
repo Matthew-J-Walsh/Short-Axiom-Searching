@@ -17,7 +17,10 @@ def vampire_expression_to_fof_line(expression: str, name: str, type: Literal["ax
     return 'fof('+name+", "+type+", "+"!["+','.join(vars)+"]: "+expression+").\n"
 
 def _generate_vampire_input_file(vampire_form: str, counter_model_set: list[str]) -> str:
-    file_name: str = "vampire_run_"+str(datetime.now())
+    if not os.path.exists("input_tmp"):
+        os.makedirs("input_tmp")
+
+    file_name: str = os.path.join("input_tmp", "vampire_run_"+str(datetime.now()))
     for i in ['-', ' ', ':', '.']: 
         file_name = file_name.replace(i, '')
     file_name += '.p'
@@ -25,7 +28,7 @@ def _generate_vampire_input_file(vampire_form: str, counter_model_set: list[str]
     contents: str = ""
     contents += vampire_expression_to_fof_line(_VAMPIRE_MODUS_PONENS, "mp", "axiom")
     contents += vampire_expression_to_fof_line(vampire_form, "cand", "axiom")
-    contents += ''.join(vampire_expression_to_fof_line(counter, "counter"+str(i), "axiom") for i, counter in enumerate(counter_model_set))
+    contents += ''.join(vampire_expression_to_fof_line(counter, "counter"+str(i), "conjecture") for i, counter in enumerate(counter_model_set))
 
     with open(file_name, 'w') as input_file:
         input_file.write(contents)
@@ -48,7 +51,7 @@ def save_countermodel(result: str, folder: str) -> str:
         print(result)
         raise RuntimeError
 
-def create_vampire_countermodel_instance(executable_file: str, counter_model_sets: list[list[str]], counter_model_folder: str, model_spec: ModelSpec,
+def create_vampire_countermodel_instance(executable_file: str, counter_modeling_formula_sets: list[list[str]], counter_model_folder: str, model_spec: ModelSpec,
                                          optional_args: dict[str, str] | None = None, optional_flags: list[str] | None = None, verify_models: bool = False) -> VampireWrapper:
     """Creates a vampire wrapper specified by inputs
 
@@ -56,7 +59,7 @@ def create_vampire_countermodel_instance(executable_file: str, counter_model_set
     ----------
     executable_file : str
         vampire executable filepath
-    counter_model_sets : list[list[str]]
+    counter_modeling_formula_sets : list[list[str]]
         Lists of countermodeling lists (usually known tautologies forming axiom systems)
     optional_args : dict[str, str] | None, optional
         Added arguments for vampire executable, by default None
@@ -98,9 +101,9 @@ def create_vampire_countermodel_instance(executable_file: str, counter_model_set
         os.makedirs(counter_model_folder)
     
     def vampire_wrapper(vampire_form: str) -> bool | Model:
-        for fmb_start_size in range(2, 8):
-            for counter_model_set in counter_model_sets:
-                input_file_name: str = _generate_vampire_input_file(vampire_form, counter_model_set)
+        for fmb_start_size in [2, 6, 7, 8]:
+            for counter_formula_set in counter_modeling_formula_sets:
+                input_file_name: str = _generate_vampire_input_file(vampire_form, counter_formula_set)
 
                 result: str = subprocess.run(command + ["--fmb_start_size", str(fmb_start_size)] + [input_file_name], capture_output=True, text=True).stdout
 
@@ -112,6 +115,8 @@ def create_vampire_countermodel_instance(executable_file: str, counter_model_set
                     model: Model = Model(model_spec, model_filename=save_countermodel(result, counter_model_folder))
                     if verify_models:
                         assert model(vampire_form), str(model)+"\n"+vampire_form
+                        for counter_formula in counter_formula_set:
+                            assert not model(counter_formula), str(model)+"\n"+counter_formula
 
                     os.remove(input_file_name)
                     return model
