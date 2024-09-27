@@ -549,6 +549,9 @@ class Model():
         else:
             raise ValueError
         
+    def apply_function(self, op: OperationSpec, *arr: ModelArray) -> int | np.ndarray:
+        return self._apply_function(self.operation_definitions[op], *arr)
+        
 CN_STANDARD_MODEL = Model(CN_SPEC)
 C0_STANDARD_MODEL = Model(C0_SPEC)
 C1_STANDARD_MODEL = Model(C1_SPEC)
@@ -595,10 +598,18 @@ class ModelTable():
         ModelTable
             Self with
         """        
-        if isinstance(new_model, Model):
-            self.counter_models.append(new_model)
-        else: #isinstance(new_model, str)
-            self.counter_models.append(Model(self.spec, model_filename=new_model))
+        if isinstance(new_model, str):
+            new_model = Model(self.spec, model_filename=new_model)
+        for cm in self.counter_models:
+            same: bool = new_model.order == cm.order
+            if same:
+                for cons in self.spec.constants:
+                    same = same and (new_model.constant_definitions[cons] == cm.constant_definitions[cons])
+            if same:
+                for op in self.spec.operators:
+                    same = same and (new_model.operation_definitions[op] == cm.operation_definitions[op]).all()
+            assert not same
+        self.counter_models.append(new_model)
         self.counter_models.sort(key = lambda x: x.order)
         return self
     

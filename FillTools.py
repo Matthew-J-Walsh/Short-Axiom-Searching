@@ -1,4 +1,6 @@
 from __future__ import annotations
+from typing import Any
+
 
 from Globals import *
 
@@ -25,7 +27,7 @@ class FillTable(NamedTuple):
         _initialize_fill_table(size)
         return FillTable(_fill_table_fills[:size, :bells(size)], _fill_table_subsumptive_table[:bells(size), :bells(size)])
 
-class Cleaver:
+class CleavingMatrix:
     full_size: int
     """Full fill size targeted"""
     constant_count: int
@@ -47,7 +49,7 @@ class Cleaver:
                 self.cleaves[comb] = self.base_cleaver(counts[0])
 
     @staticmethod
-    def base_cleaver(size: int) -> np.ndarray:
+    def base_cleaver(size: int) -> np.ndarray[Any, np.dtype[np.bool_]]:
         """Generates a cleaver for a specific size of fill
 
         Parameters
@@ -62,13 +64,7 @@ class Cleaver:
         """    
         return np.ones(bells(size), dtype=np.bool_)
     
-    def invert(self) -> Cleaver:
-        for v in self.cleaves.values():
-            v = 1 - v
-
-        return self
-    
-    def __imul__(self, other: Cleaver) -> Cleaver:
+    def __imul__(self, other: CleavingMatrix) -> CleavingMatrix:
         assert self.full_size == other.full_size
         assert self.constant_count == other.constant_count
         for k in other.cleaves.keys():
@@ -78,25 +74,6 @@ class Cleaver:
                 self.cleaves[k] = other.cleaves[k]
 
         return self
-
-    @classmethod
-    def from_downward_cleave_at_point(cls, point: np.ndarray[Any, np.dtype[np.int8]], full_size: int, constants: Sequence[int]) -> Cleaver:
-        cleave: Cleaver = cls(full_size, len(constants), no_cleaves = True)
-        cleave.cleaves = {}
-        for comb in itertools.product(range(cleave.constant_count + 1), repeat=cleave.full_size):
-            constants_apply = True
-            for i in range(point.shape[0]):
-                if comb[i]!=0 and constants[comb[i]-1]!=point[i]:
-                    constants_apply = False
-                    break
-            if constants_apply:
-                var_count: int = comb.count(0)
-                mask = np.ones(var_count, dtype=np.bool_)
-                mask[[i for i in range(len(comb)) if comb[i]!=0]] = False
-                reduced_point: np.ndarray[Any, np.dtype[np.int8]] = point[mask]
-                cleave.cleaves[comb] = fill_downward_cleave(_point_to_fill(reduced_point).point, var_count)
-
-        return cleave
     
 
 def _fill_injection(A: np.ndarray[Any, np.dtype[np.int8]], B: np.ndarray[Any, np.dtype[np.int8]]) -> dict[int, int] | Literal[False]:
@@ -329,12 +306,36 @@ def _point_to_fill(fill: np.ndarray) -> FillPointer:
         fixed_point.append(conversion[fill[i]])
     return FillPointer(_point_to_fill_cached(tuple(fixed_point)), fill.shape[0])
 
-def fill_result_disassembly_application(evaluation: ModelArray, constants: Sequence[int]) -> Cleaver:
-    cleaver = Cleaver(evaluation.ndim, len(constants))
+def fill_result_disassembly_application(evaluation: ModelArray, constants: Sequence[int], cleave_direction: Literal["Upward"] | Literal["Downward"]) -> CleavingMatrix:
+    fill_pairings: dict[tuple[int, ...], list[FillPointer]] = fill_disassembly_specified_fill_pairings(evaluation, constants)
+    cleavematrix: CleavingMatrix = CleavingMatrix(evaluation.ndim, len(constants), no_cleaves = True)
+    cleavematrix.cleaves = {}
+
+    for constant_specifier, fills in fill_pairings.items():
+        var_count: int = constant_specifier.count(0)
+        cleaver: np.ndarray[Any, np.dtype[np.bool_]] = CleavingMatrix.base_cleaver(var_count)
+        sorted_fills: list[FillPointer] = sorted(fills, key = lambda f: f.point, reverse = cleave_direction == "Upward")
+        for fill in sorted_fills:
+            if cleaver[fill.point]!=0:
+                cleaver *= fill_downward_cleave(fill.point, var_count)
+        if cleave_direction == "Upward":
+            cleaver = np.logical_not(cleaver)
+        cleavematrix.cleaves[constant_specifier] = cleaver
+
+    return cleavematrix
+
+def fill_disassembly_specified_fill_pairings(evaluation: ModelArray, constants: Sequence[int]) -> dict[tuple[int, ...], list[FillPointer]]:
+    fill_pairings: dict[tuple[int, ...], list[FillPointer]] = {}
     falses = np.vstack(np.logical_not(evaluation).nonzero())
     for i in range(falses.shape[1]):
-        cleaver *= Cleaver.from_downward_cleave_at_point(falses[:, i], evaluation.ndim, constants)
-
-    return cleaver
-
-
+        #point = falses[:, i]
+        constant_possibilities = [[0] + [k for k, c in enumerate(constants) if c==falses[j, i]] for j in range(evaluation.ndim)]
+        for constant_combination in itertools.product(*constant_possibilities):
+            #var_count: int = constant_combination.count(0)
+            reduced_point: np.ndarray[Any, np.dtype[np.int8]] = np.array([pv for ccv, pv in zip(constant_combination, falses[:, i]) if ccv==0], dtype=np.int8)
+            if constant_combination in fill_pairings.keys():
+                fill_pairings[constant_combination].append(_point_to_fill(reduced_point))
+            else:
+                fill_pairings[constant_combination] = [_point_to_fill(reduced_point)]
+    
+    return fill_pairings

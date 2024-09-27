@@ -17,7 +17,7 @@ class TreeForm:
     """References for all Operations in a particular order (will define iteration order, not nessisarily efficiency, and definantly not the total possibilities)"""
     CONSTANT_REFERENCE: tuple[ConstantSpec, ...]
     """References for all Constants in a particular order (will define iteration order, not nessisarily efficiency, and definantly not the total possibilities)"""
-    _PREFIX: OperationSpec
+    PREFIX: OperationSpec
     """Prefix operator"""
     _MAXIMUM_FULLY_CACHED_NODE_SIZE: int
     """Maximum size Node to make PsudeoNodes for"""
@@ -28,7 +28,7 @@ class TreeForm:
         assert prefix.arity==1, "Non-Unitary prefixes not implemented at this time"
         self.OPERATION_REFERENCE = tuple([ref for ref in lexographical_reference if isinstance(ref, OperationSpec)])
         self.CONSTANT_REFERENCE = tuple([ref for ref in lexographical_reference if isinstance(ref, ConstantSpec)])
-        self._PREFIX = prefix
+        self.PREFIX = prefix
         self._MAXIMUM_FULLY_CACHED_NODE_SIZE = MAXIMUM_FULLY_CACHED_NODE_SIZE
         self._PSUDEO_NODE_CACHE = {}
 
@@ -479,14 +479,19 @@ class TreeForm:
             """            
 
             var_count: int = self.counts[-1]
-            full_target_evaluation: ModelArray = self.calculate(model_table.target_model, full_fill(var_count))
+            full_target_evaluation = model_table.target_model.apply_function(self.tree.PREFIX, self.calculate(model_table.target_model, full_fill(var_count)))
+            assert not isinstance(full_target_evaluation, int)
+            assert full_target_evaluation.dtype == np.bool_
 
-            cleaver = Cleaver(var_count, len(self.tree.CONSTANT_REFERENCE))
-            cleaver *= fill_result_disassembly_application(full_target_evaluation, [model_table.target_model.constant_definitions[cons] for cons in self.tree.CONSTANT_REFERENCE])
+            cleaver = CleavingMatrix(var_count, len(self.tree.CONSTANT_REFERENCE))
+            cleaver *= fill_result_disassembly_application(full_target_evaluation, [model_table.target_model.constant_definitions[cons] for cons in self.tree.CONSTANT_REFERENCE], "Downward")
 
             for cm in model_table.counter_models:
-                cleaver *= fill_result_disassembly_application(self.calculate(cm, full_fill(var_count)), [cm.constant_definitions[cons] for cons in self.tree.CONSTANT_REFERENCE]).invert()
-            
+                full_counter_model_evaluation = cm.apply_function(self.tree.PREFIX, self.calculate(cm, full_fill(var_count)))
+                assert not isinstance(full_counter_model_evaluation, int)
+                assert full_counter_model_evaluation.dtype == np.bool_
+                cleaver *= fill_result_disassembly_application(full_counter_model_evaluation, [cm.constant_definitions[cons] for cons in self.tree.CONSTANT_REFERENCE], "Upward")
+
             for k, sub_cleave in cleaver.cleaves.items():
                 for i, fill in enumerate(fill_iterator(k.count(0))):
                     fill_dims: DimensionalReference = get_fill(fill)
@@ -494,18 +499,25 @@ class TreeForm:
                     fillin: list[Any] = [fill_dims[(j := j + 1)] if k[i]==0 else self.tree.CONSTANT_REFERENCE[- k[i] - 1].vampire_symbol for i in range(var_count)]
 
                     if sub_cleave[i]:
+                        print(i)
                         vamp: str = self.vampire(fillin)
-                        #assert model_table.target_model("t("+vamp+")"), vamp+"\n"+str(i)+"\n"+str(fillin)
+                        assert model_table.target_model("t("+vamp+")"), vamp+"\n"+str(i)+"\n"+str(fillin)
                         vampire_result: bool | Model = vampire_wrapper(vamp)
                         if vampire_result==False:
                             remaining_file.write(self.vampire(fillin)+"\n")
                         else:
                             assert isinstance(vampire_result, Model), "Vampire wrapper shouldn't return True, only models or false."
                             model_table += vampire_result
-                            cleaver *= fill_result_disassembly_application(self.calculate(vampire_result, full_fill(var_count)), [vampire_result.constant_definitions[cons] for cons in self.tree.CONSTANT_REFERENCE]).invert()
-                    #else:
-                    #    vamp: str = self.vampire(fillin)
-                    #    assert not model_table.target_model("t("+vamp+")"), vamp+"\n"+str(i)+"\n"+str(fillin)
+                            full_counter_model_evaluation = vampire_result.apply_function(self.tree.PREFIX, self.calculate(vampire_result, full_fill(var_count)))
+                            assert not isinstance(full_counter_model_evaluation, int)
+                            assert full_counter_model_evaluation.dtype == np.bool_
+                            cleaver *= fill_result_disassembly_application(full_counter_model_evaluation, [vampire_result.constant_definitions[cons] for cons in self.tree.CONSTANT_REFERENCE], "Upward")
+                    else:
+                        vamp: str = self.vampire(fillin)
+                        valid = not model_table.target_model("t("+vamp+")")
+                        for cm in model_table.counter_models:
+                            valid = valid or cm("t("+vamp+")")
+                        assert valid, vamp+"\n"+str(i)+"\n"+str(fillin)
 
             return sum(c.sum() for c in cleaver.cleaves.values())
     
@@ -670,7 +682,7 @@ class TreeForm:
         with open(remaining_filename, 'w') as remaining_file:
             for state in self.new_node(size, default_degeneracy).get_iterator(default_degeneracy):
                 i += 1
-                unsolved_count += state.process(model_table, lambda vampire_form: vampire_wrapper(self._PREFIX.vampire_symbol+"("+vampire_form+")"), remaining_file)
+                unsolved_count += state.process(model_table, lambda vampire_form: vampire_wrapper(self.PREFIX.vampire_symbol+"("+vampire_form+")"), remaining_file)
         
         print("Processed "+str(i)+" formulas.")
         
@@ -728,7 +740,7 @@ class TreeForm:
             return sum([c for s, c in res])
 
     def verify_formulas(self, size: int) -> None:
-        model: Model = Model(ModelSpec((self._PREFIX,) + self.OPERATION_REFERENCE, self.CONSTANT_REFERENCE))
+        model: Model = Model(ModelSpec((self.PREFIX,) + self.OPERATION_REFERENCE, self.CONSTANT_REFERENCE))
         
         target_count: int = self.formula_count(size)
 
@@ -737,7 +749,7 @@ class TreeForm:
         expressions: set[str] = set()
         for state in self.new_node(size, default_degeneracy).get_iterator(default_degeneracy):
             count += 1
-            vamp = self._PREFIX.vampire_symbol+"("+state.vampire()+")"
+            vamp = self.PREFIX.vampire_symbol+"("+state.vampire()+")"
             expressions.add(vamp)
             try:
                 model.compile_expression(vamp)
