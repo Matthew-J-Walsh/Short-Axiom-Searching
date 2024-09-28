@@ -10,3 +10,6 @@ pozay.py
 /CNRemaining
 /CNCounterModels
 CNFull14prof.txt
+*.lprof
+CNFulllprun.txt
+/C0Remaining

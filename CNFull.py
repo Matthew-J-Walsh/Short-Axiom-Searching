@@ -10,6 +10,8 @@ def FullCN() -> None:
     unsolved_folder = "CNRemaining"
     counter_model_folder = "CNCounterModels"
 
+    #wipe_counter_models(counter_model_folder)
+
     counter_modeling_formula_sets: list[list[str]] = [["t(i(i(i(i(i(X,Y),i(n(Z),n(U))),Z),V),i(i(V,X),i(U,X))))"]]
 
     CN = TreeForm(CN_OPERATIONS[1:], CN_OPERATIONS[0], 14)
@@ -22,7 +24,7 @@ def FullCN() -> None:
 
     vampire_wrapper: VampireWrapper = create_vampire_countermodel_instance(vampire_executable_file_path, counter_modeling_formula_sets, counter_model_folder, Models.spec, verify_models=True)
 
-    for i in [10]:
+    for i in [9, 10, 11, 12, 13]:
         print("Starting length: "+str(i))
         start_time = time.time()
         CN.process_tree(i, Models, vampire_wrapper, os.path.join(unsolved_folder, "CN"+str(i)+"Rem.txt"))

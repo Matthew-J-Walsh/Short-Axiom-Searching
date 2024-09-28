@@ -3,6 +3,17 @@ from ModelTools import *
 
 import subprocess
 
+#counter_axiom = 'i(i(i(X,Y),i(o,Z)),i(U,i(i(Z,X),i(V,i(W,X)))))' #C1 old
+#counter_axiom = 'i(i(i(i(i(X,Y),i(Z,o)),U),V),i(i(V,X),i(Z,X)))' #C0?
+#counter_axiom = 'i(i(i(X,Y),i(Z,i(o,U))),i(i(U,X),i(Z,i(V,X))))'
+#counter_axiom = 'i(i(X,Y),i(i(Y,Z),i(X,Z)))' #C0 infinite transitivity
+#counter_axiom = 'i(i(i(X,o),i(Y,o)),i(Y,X))' #C0 L4
+#counter_axiom = 'i(X,i(Y,X))' #C0 L1
+#counter_axiom = 'd(n(d(n(d(X,Y)),n(Z))),n(d(n(d(n(V),V)),d(n(Z),X))))=Z' #DN single axiom DN-13345
+#counter_axiom = 'i(i(i(X,Y),i(o,Z)),i(U,i(i(Z,X),i(V,i(W,X)))))' #C1 old
+#counter_axiom = 'i(i(i(i(i(X,Y),i(Z,o)),U),V),i(i(V,X),i(Z,X)))' #C0?
+#counter_axiom = 'i(i(i(X,Y),i(Z,i(o,U))),i(i(U,X),i(Z,i(V,X))))'
+
 _VAMPIRE_MODUS_PONENS = "((t(X) & t(i(X,Y))) => t(Y))"
 
 class VampireWrapper(Protocol):
@@ -115,8 +126,7 @@ def create_vampire_countermodel_instance(executable_file: str, counter_modeling_
                     model: Model = Model(model_spec, model_filename=save_countermodel(result, counter_model_folder))
                     if verify_models:
                         assert model(vampire_form), str(model)+"\n"+vampire_form
-                        for counter_formula in counter_formula_set:
-                            assert not model(counter_formula), str(model)+"\n"+counter_formula
+                        assert not all(model(counter_formula) for counter_formula in counter_formula_set), str(model)+"\n"+str(counter_formula_set)
 
                     os.remove(input_file_name)
                     return model
@@ -126,4 +136,7 @@ def create_vampire_countermodel_instance(executable_file: str, counter_modeling_
 
     return vampire_wrapper
 
-
+def wipe_counter_models(counter_model_folder: str) -> None:
+    if os.path.exists(counter_model_folder) and os.path.isdir(counter_model_folder):
+        for counter_model_filename in os.listdir(counter_model_folder):
+            os.remove(os.path.join(counter_model_folder, counter_model_filename))

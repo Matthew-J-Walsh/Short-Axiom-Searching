@@ -23,14 +23,17 @@ class TreeForm:
     """Maximum size Node to make PsudeoNodes for"""
     _PSUDEO_NODE_CACHE: dict[int, tuple[TreeForm.Node, ...]]
     """Cache of items used for PsudeoNode iteration"""
+    _RESONABLE_MAXIMUM_FULL_MODELING_SIZE: int
+    """Above what size (order) model should full modeling be skipped and just individual formulas processed brute force"""
 
-    def __init__(self, lexographical_reference: tuple[OperationSpec | ConstantSpec, ...], prefix: OperationSpec, MAXIMUM_FULLY_CACHED_NODE_SIZE: int) -> None:
+    def __init__(self, lexographical_reference: tuple[OperationSpec | ConstantSpec, ...], prefix: OperationSpec, MAXIMUM_FULLY_CACHED_NODE_SIZE: int, RESONABLE_MAXIMUM_FULL_MODELING_SIZE: int = 0) -> None:
         assert prefix.arity==1, "Non-Unitary prefixes not implemented at this time"
         self.OPERATION_REFERENCE = tuple([ref for ref in lexographical_reference if isinstance(ref, OperationSpec)])
         self.CONSTANT_REFERENCE = tuple([ref for ref in lexographical_reference if isinstance(ref, ConstantSpec)])
         self.PREFIX = prefix
         self._MAXIMUM_FULLY_CACHED_NODE_SIZE = MAXIMUM_FULLY_CACHED_NODE_SIZE
         self._PSUDEO_NODE_CACHE = {}
+        self._RESONABLE_MAXIMUM_FULL_MODELING_SIZE = RESONABLE_MAXIMUM_FULL_MODELING_SIZE
 
         i: int = 1
         while i <= self._MAXIMUM_FULLY_CACHED_NODE_SIZE:
@@ -459,7 +462,8 @@ class TreeForm:
             while self.iterate(external_degeneracy):
                 yield self
 
-        def process(self, model_table: ModelTable, vampire_wrapper: VampireWrapper, remaining_file: TextIOWrapper) -> int:
+        #@profile # type: ignore
+        def process(self, model_table: ModelTable, vampire_wrapper: VampireWrapper, remaining_file: TextIOWrapper, debugging_verification: bool = False) -> int:
             """Fully processes this Node in its current state (without iterating it), creating new countermodels using vampire as needed.
             Indeterminate expressions will be placed into the remaining file
 
@@ -479,47 +483,68 @@ class TreeForm:
             """            
 
             var_count: int = self.counts[-1]
-            full_target_evaluation = model_table.target_model.apply_function(self.tree.PREFIX, self.calculate(model_table.target_model, full_fill(var_count)))
-            assert not isinstance(full_target_evaluation, int)
-            assert full_target_evaluation.dtype == np.bool_
-
             cleaver = CleavingMatrix(var_count, len(self.tree.CONSTANT_REFERENCE))
-            cleaver *= fill_result_disassembly_application(full_target_evaluation, [model_table.target_model.constant_definitions[cons] for cons in self.tree.CONSTANT_REFERENCE], "Downward")
 
+            self._process_cleaver_helper(cleaver, model_table.target_model, "Downward")
+            
             for cm in model_table.counter_models:
-                full_counter_model_evaluation = cm.apply_function(self.tree.PREFIX, self.calculate(cm, full_fill(var_count)))
-                assert not isinstance(full_counter_model_evaluation, int)
-                assert full_counter_model_evaluation.dtype == np.bool_
-                cleaver *= fill_result_disassembly_application(full_counter_model_evaluation, [cm.constant_definitions[cons] for cons in self.tree.CONSTANT_REFERENCE], "Upward")
+                if cleaver.empty:
+                    break
+                self._process_cleaver_helper(cleaver, cm, "Upward")
 
-            for k, sub_cleave in cleaver.cleaves.items():
+            for k in cleaver.cleaves.keys():
                 for i, fill in enumerate(fill_iterator(k.count(0))):
                     fill_dims: DimensionalReference = get_fill(fill)
                     j = -1
                     fillin: list[Any] = [fill_dims[(j := j + 1)] if k[i]==0 else self.tree.CONSTANT_REFERENCE[- k[i] - 1].vampire_symbol for i in range(var_count)]
 
-                    if sub_cleave[i]:
-                        print(i)
+                    if cleaver.cleaves[k][i]:
                         vamp: str = self.vampire(fillin)
-                        assert model_table.target_model("t("+vamp+")"), vamp+"\n"+str(i)+"\n"+str(fillin)
+
+                        if debugging_verification:
+                            assert not any(cm("t("+vamp+")") for cm in model_table.counter_models)
+                            assert model_table.target_model("t("+vamp+")"), vamp+"\n"+str(i)+"\n"+str(fillin)
+
                         vampire_result: bool | Model = vampire_wrapper(vamp)
                         if vampire_result==False:
                             remaining_file.write(self.vampire(fillin)+"\n")
                         else:
                             assert isinstance(vampire_result, Model), "Vampire wrapper shouldn't return True, only models or false."
                             model_table += vampire_result
-                            full_counter_model_evaluation = vampire_result.apply_function(self.tree.PREFIX, self.calculate(vampire_result, full_fill(var_count)))
-                            assert not isinstance(full_counter_model_evaluation, int)
-                            assert full_counter_model_evaluation.dtype == np.bool_
-                            cleaver *= fill_result_disassembly_application(full_counter_model_evaluation, [vampire_result.constant_definitions[cons] for cons in self.tree.CONSTANT_REFERENCE], "Upward")
-                    else:
+                            self._process_cleaver_helper(cleaver, vampire_result, "Upward")
+                            if debugging_verification:
+                                assert not cleaver.cleaves[k][i]
+                    elif debugging_verification:
                         vamp: str = self.vampire(fillin)
-                        valid = not model_table.target_model("t("+vamp+")")
-                        for cm in model_table.counter_models:
-                            valid = valid or cm("t("+vamp+")")
-                        assert valid, vamp+"\n"+str(i)+"\n"+str(fillin)
+                        assert not model_table.target_model("t("+vamp+")") or any(cm("t("+vamp+")") for cm in model_table.counter_models), vamp+"\n"+str(i)+"\n"+str(fillin)
 
             return sum(c.sum() for c in cleaver.cleaves.values())
+
+        def _process_cleaver_helper(self, cleaver: CleavingMatrix, model: Model, cleave_direction: Literal["Upward"] | Literal["Downward"]) -> None:
+            if model.order > self.tree._RESONABLE_MAXIMUM_FULL_MODELING_SIZE:
+                for k in cleaver.cleaves.keys():
+                    var_count = k.count(0)
+                    cleave = CleavingMatrix.base_cleaver(var_count)
+                    fill_iter = enumerate(fill_iterator(var_count)) if cleave_direction == "Downward" else reversed(list(enumerate(fill_iterator(var_count))))
+                    for i, fill in fill_iter:
+                        fill_dims: DimensionalReference = get_fill(fill)
+                        j = -1
+                        fillin: list[Any] = [fill_dims[(j := j + 1)] if k[i]==0 else self.tree.CONSTANT_REFERENCE[- k[i] - 1].vampire_symbol for i in range(cleaver.full_size)]
+                        if cleaver.cleaves[k][i]:
+                            vamp: str = self.vampire(fillin)
+                            if model("t("+vamp+")"):
+                                cleave *= fill_downward_cleave(i, var_count).astype(np.bool_)
+
+                    if cleave_direction == "Downward":
+                        cleaver.cleaves[k] *= cleave
+                    else: #cleave_direction == "Upward":
+                        cleaver.cleaves[k] *= np.logical_not(cleave)
+
+            else:
+                full_model_evaluation = model.apply_function(self.tree.PREFIX, self.calculate(model, full_fill(cleaver.full_size)))
+                assert not isinstance(full_model_evaluation, int)
+                assert full_model_evaluation.dtype == np.bool_
+                cleaver *= fill_result_disassembly_application(full_model_evaluation, [model.constant_definitions[cons] for cons in self.tree.CONSTANT_REFERENCE], cleave_direction)
     
     class PsudeoNode(Node):
         """A PsudeoNode acts like a Node but actually just indexes a known list of every possible node of that length 

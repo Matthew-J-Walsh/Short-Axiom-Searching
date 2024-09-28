@@ -649,13 +649,13 @@ class ModelTable():
             _description_
         """        
         for counter_modeling_formula_set in counter_modeling_formula_sets:
-            for model in counter_modeling_formula_set:
-                assert self.target_model(model)
+            for formula in counter_modeling_formula_set:
+                assert self.target_model(formula)
         for counter_model in self.counter_models:
             valid_cm = False
             for counter_modeling_formula_set in counter_modeling_formula_sets:
-                for model in counter_modeling_formula_set:
-                    if not counter_model(model):
+                for formula in counter_modeling_formula_set:
+                    if not counter_model(formula):
                         valid_cm = True
             assert valid_cm
     

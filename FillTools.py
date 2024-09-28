@@ -34,10 +34,12 @@ class CleavingMatrix:
     """Number of constants"""
     cleaves: dict[tuple[int, ...], np.ndarray[Any, np.dtype[np.bool_]]]
     """Mapping from """
+    empties: set[tuple[int, ...]]
 
     def __init__(self, full_size: int, constant_count: int, allow_degeneracy: bool = False, no_cleaves: bool = False) -> None:
         self.full_size = full_size
         self.constant_count = constant_count
+        self.empties = set()
         if not no_cleaves:
             self.cleaves = {}
             for comb in itertools.product(range(self.constant_count + 1), repeat=self.full_size):
@@ -74,6 +76,36 @@ class CleavingMatrix:
                 self.cleaves[k] = other.cleaves[k]
 
         return self
+    
+    def invert(self, allow_degeneracy: bool = False) -> CleavingMatrix:
+        self.empties = set()
+        for comb in self.cleaves.keys():
+            self.cleaves[comb] = np.logical_not(self.cleaves[comb])
+
+        for comb in itertools.product(range(self.constant_count + 1), repeat=self.full_size):
+            counts = np.zeros(self.constant_count + 1, dtype=np.int8)
+            for i in comb:
+                counts[i] += 1
+            if not allow_degeneracy and (counts == 0).any(): #degenerate
+                continue
+            if comb not in self.cleaves.keys():
+                self.cleaves[comb] = np.logical_not(self.base_cleaver(counts[0]))
+
+        return self
+    
+    @property
+    def empty(self) -> bool:
+        for comb in itertools.product(range(self.constant_count + 1), repeat=self.full_size):
+            if not comb in self.cleaves:
+                return False
+            if not comb in self.empties:
+                if (self.cleaves[comb]==True).sum() == 0:
+                    self.empties.add(comb)
+                else:
+                    return False
+
+        return True
+
     
 
 def _fill_injection(A: np.ndarray[Any, np.dtype[np.int8]], B: np.ndarray[Any, np.dtype[np.int8]]) -> dict[int, int] | Literal[False]:
@@ -289,7 +321,8 @@ def _point_to_fill_cached(fill: tuple[int, ...]) -> int:
             return i
     raise RuntimeError("Unabled find row for fill "+str(fill)+" possibly not normalized.")
 
-def _point_to_fill(fill: np.ndarray) -> FillPointer:
+#@profile # type: ignore
+def point_to_fill(fill: np.ndarray) -> FillPointer:
     first_val: int = fill[0]
     cut: int = 0
     while cut + 1 < fill.shape[0] and fill[cut + 1] == first_val:
@@ -306,6 +339,7 @@ def _point_to_fill(fill: np.ndarray) -> FillPointer:
         fixed_point.append(conversion[fill[i]])
     return FillPointer(_point_to_fill_cached(tuple(fixed_point)), fill.shape[0])
 
+#@profile # type: ignore
 def fill_result_disassembly_application(evaluation: ModelArray, constants: Sequence[int], cleave_direction: Literal["Upward"] | Literal["Downward"]) -> CleavingMatrix:
     fill_pairings: dict[tuple[int, ...], list[FillPointer]] = fill_disassembly_specified_fill_pairings(evaluation, constants)
     cleavematrix: CleavingMatrix = CleavingMatrix(evaluation.ndim, len(constants), no_cleaves = True)
@@ -318,24 +352,24 @@ def fill_result_disassembly_application(evaluation: ModelArray, constants: Seque
         for fill in sorted_fills:
             if cleaver[fill.point]!=0:
                 cleaver *= fill_downward_cleave(fill.point, var_count)
-        if cleave_direction == "Upward":
-            cleaver = np.logical_not(cleaver)
         cleavematrix.cleaves[constant_specifier] = cleaver
+
+    if cleave_direction == "Upward":
+        cleavematrix.invert()
 
     return cleavematrix
 
+#@profile # type: ignore
 def fill_disassembly_specified_fill_pairings(evaluation: ModelArray, constants: Sequence[int]) -> dict[tuple[int, ...], list[FillPointer]]:
     fill_pairings: dict[tuple[int, ...], list[FillPointer]] = {}
     falses = np.vstack(np.logical_not(evaluation).nonzero())
     for i in range(falses.shape[1]):
-        #point = falses[:, i]
         constant_possibilities = [[0] + [k for k, c in enumerate(constants) if c==falses[j, i]] for j in range(evaluation.ndim)]
         for constant_combination in itertools.product(*constant_possibilities):
-            #var_count: int = constant_combination.count(0)
             reduced_point: np.ndarray[Any, np.dtype[np.int8]] = np.array([pv for ccv, pv in zip(constant_combination, falses[:, i]) if ccv==0], dtype=np.int8)
             if constant_combination in fill_pairings.keys():
-                fill_pairings[constant_combination].append(_point_to_fill(reduced_point))
+                fill_pairings[constant_combination].append(point_to_fill(reduced_point))
             else:
-                fill_pairings[constant_combination] = [_point_to_fill(reduced_point)]
+                fill_pairings[constant_combination] = [point_to_fill(reduced_point)]
     
     return fill_pairings
