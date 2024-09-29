@@ -24,7 +24,7 @@ def FullCN() -> None:
 
     vampire_wrapper: VampireWrapper = create_vampire_countermodel_instance(vampire_executable_file_path, counter_modeling_formula_sets, counter_model_folder, Models.spec, verify_models=True)
 
-    for i in [9, 10, 11, 12, 13]:
+    for i in [12, 13, 14]:
         print("Starting length: "+str(i))
         start_time = time.time()
         CN.process_tree(i, Models, vampire_wrapper, os.path.join(unsolved_folder, "CN"+str(i)+"Rem.txt"))

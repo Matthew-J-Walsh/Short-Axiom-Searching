@@ -68,19 +68,32 @@ def numpy_read_only_array(*args, dtype: type = np.int8) -> np.ndarray:
     return arr
 
 CLASSICAL_TRUTH = OperationSpec("T", "t", 1, numpy_read_only_array([False, True], dtype=np.bool_))
+"""Definition of classical truth predicate"""
 CLASSICAL_IMPLICATION = OperationSpec("C", "i", 2, numpy_read_only_array([[1, 1], [0, 1]]))
+"""Definition of classical implication function"""
 CLASSICAL_NEGATION = OperationSpec("N", "n", 1, numpy_read_only_array([1, 0]))
+"""Definition of classical negation function"""
 CLASSICAL_TRUE = ConstantSpec("T", "o", 1)
+"""Definition of classical True constant"""
 CLASSICAL_FALSE = ConstantSpec("F", "o", 0)
+"""Definition of classical False constant"""
 
 CN_OPERATIONS: tuple[OperationSpec, ...] = (CLASSICAL_TRUTH, CLASSICAL_IMPLICATION, CLASSICAL_NEGATION)
+"""Operations for Propositional logic"""
 CN_CONSTANTS: tuple[ConstantSpec, ...] = ()
+"""Constants for Propositional logic"""
 CN_SPEC: ModelSpec = ModelSpec(CN_OPERATIONS, CN_CONSTANTS)
+"""Spec for Propositional logic"""
 C_OPERATIONS: tuple[OperationSpec, ...] = (CLASSICAL_TRUTH, CLASSICAL_IMPLICATION)
+"""Operations for Implicational logics"""
 C0_CONSTANTS: tuple[ConstantSpec, ...] = (CLASSICAL_FALSE,)
+"""Constants for Implication logic with False constant"""
 C1_CONSTANTS: tuple[ConstantSpec, ...] = (CLASSICAL_TRUE,)
+"""Constants for Implication logic with True constant"""
 C0_SPEC: ModelSpec = ModelSpec(C_OPERATIONS, C0_CONSTANTS)
+"""Spec for Implication logic with False Constant"""
 C1_SPEC: ModelSpec = ModelSpec(C_OPERATIONS, C1_CONSTANTS)
+"""Spec for Implication logic with True Constant"""
 
 
 

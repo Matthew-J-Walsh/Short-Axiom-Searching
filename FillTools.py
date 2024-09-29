@@ -27,14 +27,19 @@ class FillTable(NamedTuple):
         _initialize_fill_table(size)
         return FillTable(_fill_table_fills[:size, :bells(size)], _fill_table_subsumptive_table[:bells(size), :bells(size)])
 
+CleavingArray = np.ndarray[Any, np.dtype[np.bool_]]
+"""Array used to determine what fills are valid"""
+
 class CleavingMatrix:
+    """Holds the values representing which fills are no longer valid / have been filtered"""
     full_size: int
     """Full fill size targeted"""
     constant_count: int
     """Number of constants"""
-    cleaves: dict[tuple[int, ...], np.ndarray[Any, np.dtype[np.bool_]]]
-    """Mapping from """
+    cleaves: dict[tuple[int, ...], CleavingArray]
+    """Mapping from constant combinations to their cleaves"""
     empties: set[tuple[int, ...]]
+    """What constant combinations are completely cleaved"""
 
     def __init__(self, full_size: int, constant_count: int, allow_degeneracy: bool = False, no_cleaves: bool = False) -> None:
         self.full_size = full_size
@@ -51,7 +56,7 @@ class CleavingMatrix:
                 self.cleaves[comb] = self.base_cleaver(counts[0])
 
     @staticmethod
-    def base_cleaver(size: int) -> np.ndarray[Any, np.dtype[np.bool_]]:
+    def base_cleaver(size: int) -> CleavingArray:
         """Generates a cleaver for a specific size of fill
 
         Parameters
@@ -78,6 +83,18 @@ class CleavingMatrix:
         return self
     
     def invert(self, allow_degeneracy: bool = False) -> CleavingMatrix:
+        """Inverts the entire Cleaving Matrix, any possible constant combination's cleave is not-ed
+
+        Parameters
+        ----------
+        allow_degeneracy : bool, optional
+            Are degenerate constant combinations allowed, by default False
+
+        Returns
+        -------
+        CleavingMatrix
+            Self
+        """        
         self.empties = set()
         for comb in self.cleaves.keys():
             self.cleaves[comb] = np.logical_not(self.cleaves[comb])
@@ -93,20 +110,38 @@ class CleavingMatrix:
 
         return self
     
+    def constant_binding_empty(self, comb: tuple[int, ...]) -> bool:
+        """Determines if a constant binding is all false
+
+        Parameters
+        ----------
+        comb : tuple[int, ...]
+            Constant combination
+
+        Returns
+        -------
+        bool
+            True if all
+        """        
+        if not comb in self.cleaves:
+            return False
+        if not comb in self.empties:
+            if (self.cleaves[comb]==True).sum() == 0:
+                self.empties.add(comb)
+            else:
+                return False
+        return True
+    
     @property
     def empty(self) -> bool:
+        """If all constant bindings are empty or not
+        """        
         for comb in itertools.product(range(self.constant_count + 1), repeat=self.full_size):
-            if not comb in self.cleaves:
+            if not self.constant_binding_empty(comb):
                 return False
-            if not comb in self.empties:
-                if (self.cleaves[comb]==True).sum() == 0:
-                    self.empties.add(comb)
-                else:
-                    return False
 
         return True
 
-    
 
 def _fill_injection(A: np.ndarray[Any, np.dtype[np.int8]], B: np.ndarray[Any, np.dtype[np.int8]]) -> dict[int, int] | Literal[False]:
     """Determines the mapping that turns A into B. 
@@ -294,64 +329,117 @@ def full_fill(size: int) -> FillPointer:
     _initialize_fill_table(size)
     return FillPointer(bells(size)-1, size)
 
-def fill_downward_cleave(i: int, size: int) -> np.ndarray:
+def fill_downward_cleave(fill: FillPointer) -> np.ndarray:
+    """Calculates a downward cleave at a point. 
+    This corresponds to finding out that point i is non-tautological so all fills that imply it are also non-tautological
+
+    Parameters
+    ----------
+    i : int
+        Cleave starting point
+    size : int
+        Size of cleave to return, number of variables in the point usually
+
+    Returns
+    -------
+    np.ndarray
+        _description_
+    """    
     #Cleave from non-tautological discovery at index i
     #Returns 0 on cleaved elements
-    assert i < _fill_table_subsumptive_table.shape[0], str(i) + ", " + str(_fill_table_subsumptive_table.shape)
-    return _fill_table_subsumptive_table[i, :bells(size)]
+    assert fill.point < _fill_table_subsumptive_table.shape[0], str(fill.point) + ", " + str(_fill_table_subsumptive_table.shape)
+    return _fill_table_subsumptive_table[fill.point, :bells(fill.size)]
 
 def fill_upward_cleave(i: int, size: int) -> np.ndarray:
     #Cleave from tautological discovery at index i
     #Returns 0 on cleaved elements
+    raise RuntimeError("Not sure why you would use this")
     assert i < _fill_table_subsumptive_table.shape[1]
     return _fill_table_subsumptive_table[:bells(size), i]
 
-def Fillin(expression: np.ndarray, arr: np.ndarray) -> np.ndarray:
-    assert len(expression.shape)==1, expression.shape
-    assert ((expression==0).sum()==arr.shape[0]).all(), str((expression==0).sum())+", "+str(arr.shape[0])
-    result = np.tile(expression.reshape(-1, 1), arr.shape[1])
-    result[expression==0] = arr
-    return result.T
-
 @functools.cache
 def _point_to_fill_cached(fill: tuple[int, ...]) -> int:
+    """Takes an properly ordered fill and returns the associated pointer
+
+    Parameters
+    ----------
+    fill : tuple[int, ...]
+        Fill
+
+    Returns
+    -------
+    int
+        Index of the Fill
+    """    
     point_arr = np.array(fill)
     for i in range(bells(point_arr.shape[0])):
         if (_fill_table_fills[-point_arr.shape[0]:, i] == point_arr).all():
             return i
     raise RuntimeError("Unabled find row for fill "+str(fill)+" possibly not normalized.")
 
-#@profile # type: ignore
-def point_to_fill(fill: np.ndarray) -> FillPointer:
+@functools.cache
+def point_to_fill(fill: tuple[int, ...]) -> FillPointer:
+    """Takes an improperly ordered fill, properly orders it, and returns the associated pointer
+
+    Parameters
+    ----------
+    fill : tuple[int, ...]
+        Fill
+
+    Returns
+    -------
+    FillPointer
+        Pointer to the Fill
+    """    
+    size: int = len(fill)
     first_val: int = fill[0]
     cut: int = 0
-    while cut + 1 < fill.shape[0] and fill[cut + 1] == first_val:
+    while cut + 1 < len(fill) and fill[cut + 1] == first_val:
         cut += 1
     fill = fill[cut:]
 
-    fixed_point: list[int] = []
+    fixed_fill: list[int] = []
     conversion: dict[int, int] = {}
     next_val = 0
-    for i in range(fill.shape[0]):
+    for i in range(len(fill)):
         if not fill[i] in conversion.keys():
             conversion[fill[i]] = next_val
             next_val += 1
-        fixed_point.append(conversion[fill[i]])
-    return FillPointer(_point_to_fill_cached(tuple(fixed_point)), fill.shape[0])
+        fixed_fill.append(conversion[fill[i]])
+    return FillPointer(_point_to_fill_cached(tuple(fixed_fill)), size)
 
 #@profile # type: ignore
 def fill_result_disassembly_application(evaluation: ModelArray, constants: Sequence[int], cleave_direction: Literal["Upward"] | Literal["Downward"]) -> CleavingMatrix:
+    """Disassembles an evaluation into a CleavingMatrix.
+    If the cleave direction is downward this CleaveMatrix is correct and corresponds to True where Tautological
+    If the cleave direction is upward this CleaveMatrix is inverted before returning and corresponds to False where Tautological (used for countermodels)
+
+    Parameters
+    ----------
+    evaluation : ModelArray
+        Full Evaluation under the model
+    constants : Sequence[int]
+        Ordered constant values (based on spec) from the model
+    cleave_direction : Literal[&quot;Upward&quot;] | Literal[&quot;Downward&quot;]
+        Direction to cleave, downward for checking tautological, upward for checking non-tautolgical
+
+    Returns
+    -------
+    CleavingMatrix
+        Resulting cleaver
+    """    
     fill_pairings: dict[tuple[int, ...], list[FillPointer]] = fill_disassembly_specified_fill_pairings(evaluation, constants)
     cleavematrix: CleavingMatrix = CleavingMatrix(evaluation.ndim, len(constants), no_cleaves = True)
     cleavematrix.cleaves = {}
 
     for constant_specifier, fills in fill_pairings.items():
         var_count: int = constant_specifier.count(0)
-        cleaver: np.ndarray[Any, np.dtype[np.bool_]] = CleavingMatrix.base_cleaver(var_count)
+        cleaver: CleavingArray = CleavingMatrix.base_cleaver(var_count)
         sorted_fills: list[FillPointer] = sorted(fills, key = lambda f: f.point, reverse = cleave_direction == "Upward")
         for fill in sorted_fills:
             if cleaver[fill.point]!=0:
-                cleaver *= fill_downward_cleave(fill.point, var_count)
+                assert fill.size == var_count, str(var_count) + " " + str(fill)
+                cleaver *= fill_downward_cleave(fill)
         cleavematrix.cleaves[constant_specifier] = cleaver
 
     if cleave_direction == "Upward":
@@ -361,15 +449,31 @@ def fill_result_disassembly_application(evaluation: ModelArray, constants: Seque
 
 #@profile # type: ignore
 def fill_disassembly_specified_fill_pairings(evaluation: ModelArray, constants: Sequence[int]) -> dict[tuple[int, ...], list[FillPointer]]:
+    """Creates a dictionary of constant combinations and their associated False points in the evaluation
+
+    Parameters
+    ----------
+    evaluation : ModelArray
+        Full Evaluation under the model
+    constants : Sequence[int]
+        Ordered constant values (based on spec) from the model
+
+    Returns
+    -------
+    dict[tuple[int, ...], list[FillPointer]]
+        Mapping from constant combinations to list of that combination's False point's associated fills
+    """    
     fill_pairings: dict[tuple[int, ...], list[FillPointer]] = {}
     falses = np.vstack(np.logical_not(evaluation).nonzero())
     for i in range(falses.shape[1]):
         constant_possibilities = [[0] + [k for k, c in enumerate(constants) if c==falses[j, i]] for j in range(evaluation.ndim)]
         for constant_combination in itertools.product(*constant_possibilities):
             reduced_point: np.ndarray[Any, np.dtype[np.int8]] = np.array([pv for ccv, pv in zip(constant_combination, falses[:, i]) if ccv==0], dtype=np.int8)
+            new_point: FillPointer = point_to_fill(tuple(reduced_point))
+            assert new_point.size == len(reduced_point), tuple(reduced_point)
             if constant_combination in fill_pairings.keys():
-                fill_pairings[constant_combination].append(point_to_fill(reduced_point))
+                fill_pairings[constant_combination].append(new_point)
             else:
-                fill_pairings[constant_combination] = [point_to_fill(reduced_point)]
+                fill_pairings[constant_combination] = [new_point]
     
     return fill_pairings

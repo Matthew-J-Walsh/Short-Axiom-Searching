@@ -3,105 +3,9 @@ from __future__ import annotations
 from Globals import *
 from FillTools import *
 
-class OperationTableHandler(Protocol):
-    def __call__(self, index: int, *inputs: tuple[ModelNode | np.ndarray, list[int]]) -> ModelNode | np.ndarray:
-        raise NotImplementedError
-
 class CompiledElement(NamedTuple):
     table: np.ndarray
     inputs: np.ndarray
-
-CACHE_DEPTH_LIMIT = 5
-
-class OperationDictionary(dict):
-    """Dictonary for an operation in a model.
-    """    
-    _operation: np.ndarray
-    _size: int
-
-    def __init__(self, operation: np.ndarray, *args, **kwargs) -> None:
-        self._operation = operation
-        self._size = len(operation.shape)
-        super().__init__(*args, **kwargs)
-
-    def __setitem__(self, key: tuple[tuple[ModelNode, tuple[int, ...]], ...], value: ModelNode) -> None:
-        assert isinstance(key, tuple)
-        assert len(key)==self._size
-        assert all(isinstance(k, ModelNode) or isinstance(k, np.ndarray) for k in key)
-        assert isinstance(value, ModelTable)
-        super().__setitem__(key, value)
-
-    def __getitem__(self, key: tuple[tuple[ModelNode, tuple[int, ...]], ...]) -> ModelNode:
-        assert isinstance(key, tuple)
-        assert len(key)==self._size
-        assert all(isinstance(node, ModelNode) and isinstance(rotation, tuple) and all(isinstance(i, int) for i in rotation) for node, rotation in key)
-        return super().__getitem__(key)
-    
-    def update(self, *args, **kwargs):
-        for key, value in dict(*args, **kwargs).items():
-            assert isinstance(key, tuple)
-            assert len(key)==self._size
-            assert all(isinstance(node, ModelNode) and isinstance(rotation, list) and all(isinstance(i, int) for i in rotation) for node, rotation in key)
-            assert isinstance(value, ModelTable)
-        super().update(*args, **kwargs)
-
-    def calculate(self, *models: tuple[ModelNode | np.ndarray, list[int]]) -> tuple[ModelNode | np.ndarray, list[int]]:
-        assert len(models)==self._size
-
-        pure_nodes = True
-        depth: int = 0
-        cannonical_rotations: list[list[int]] = []
-        rot_binding: dict[int, int] = {}
-        inv_rot_binding: dict[int, int] = {}
-        c = 0
-        for model, rot in models:
-            cannonical_rotations.append([])
-            for r in rot:
-                if not r in rot_binding.keys():
-                    rot_binding[r] = c
-                    inv_rot_binding[c] = r
-                    c += 1
-                cannonical_rotations[-1].append(rot_binding[r])
-            if isinstance(model, ModelNode):
-                depth = max(depth, model.depth)
-            else:
-                pure_nodes = False
-                depth = CACHE_DEPTH_LIMIT
-        depth += 1
-        
-        def _compute_new_arr() -> np.ndarray:
-            raise NotImplementedError
-
-        if pure_nodes:
-            cannonical_models: tuple[tuple[ModelNode, tuple[int, ...]], ...] = tuple(zip([model for model, rot in models], [tuple(rot) for rot in cannonical_rotations])) # type: ignore
-
-            if not cannonical_models in self.keys():
-                arr: np.ndarray = _compute_new_arr()
-                if depth <= CACHE_DEPTH_LIMIT:
-                    self[cannonical_models] = ModelNode(arr, depth)
-            node: ModelNode = self[cannonical_models]
-            return node, list(inv_rot_binding.values())
-        else:
-            arr = _compute_new_arr()
-            return arr, list(inv_rot_binding.values())
-    
-class ModelNode:
-    """Node containing a cached model element
-    """    
-    arr: np.ndarray
-    _hash: int | None
-    depth: int
-
-    def __init__(self, arr: np.ndarray, depth: int = 0):
-        self.arr = arr.copy()
-        self.arr.setflags(write=False)
-        self._hash = None
-        self.depth = depth
-
-    def __hash__(self) -> int:
-        if self._hash is None:
-            self._hash = hash(np.array_repr(self.arr))
-        return self._hash
 
 def apply_fill_to_cache(cache: ModelArray, fill: DimensionalReference) -> tuple[ModelArray, DimensionalReference]:
     """This deserves a lot of documentation. 
@@ -176,7 +80,7 @@ def apply_fill_to_cache(cache: ModelArray, fill: DimensionalReference) -> tuple[
     return reduced, tuple([inverse_fill_renaming[e] for e in fixed_fill])
 
 def _apply_fill_to_cache_forced_iteration(arr: np.ndarray, fill: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-    """Same as above but much slower but definantly works.
+    """Same as above, much slower, definantly works.
     """    
     assert np.unique(fill[:fill.size - arr.ndim]).size == 1, fill[:fill.size - arr.ndim]
     fill_renaming: dict[int, int] = {}
@@ -207,17 +111,36 @@ def _apply_fill_to_cache_forced_iteration(arr: np.ndarray, fill: np.ndarray) -> 
     return new_arr, np.array([inverse_fill_renaming[e] for e in set_fill])
 
 @functools.cache
-def array_dimensional_reorganizer(target_size: int, current: tuple[int, ...]) -> tuple[Any, ...]:
+def array_dimensional_resizer(target_size: int, current: tuple[int, ...]) -> tuple[slice | None, ...]:
+    """Makes dimension adder to make current shape equal to target shape
+
+    Parameters
+    ----------
+    target_size : int
+        Target size shape
+    current : tuple[int, ...]
+        Current indexing
+
+    Returns
+    -------
+    tuple[slice | None, ...]
+        Reshaping tuple
+    """    
     return tuple([slice(None) if i in current else np.newaxis for i in range(target_size)])
 
 class VampireOutputTools:
-    """Tools to process a vampire finite model
+    """Tools to process a vampire finite models
     """    
-    variable_regex: re.Pattern = re.compile(r"tff\('declare_\$i(\d+)',type,(\w|'\bfmb_\$i_\d+\b'):\$i\)")
-    function_def_regex: re.Pattern = re.compile(r"tff\(declare_(\w),type,\1: \((\$i(?: \* \$i)*)\) > \$i\)")
-    function_val_regex: re.Pattern = re.compile(r"(\w)\(([^)\s]+)\)\s*=\s*'fmb_\$i_(\d+)'")#(\w)\('fmb_\$i_(\d+)'(?:,'fmb_\$i_(\d+)')?\) = 'fmb_\$i_(\d+)'
-    function_input_regex: re.Pattern = re.compile(r"fmb_\$i_(\d+)")
-    predicate_val_regex: re.Pattern = re.compile(r"(~?)(\w)\('fmb_\$i_(\d+)'\)")
+    _variable_regex: re.Pattern = re.compile(r"tff\('declare_\$i(\d+)',type,(\w|'\bfmb_\$i_\d+\b'):\$i\)")
+    """Regex to pull out variables"""
+    _function_def_regex: re.Pattern = re.compile(r"tff\(declare_(\w),type,\1: \((\$i(?: \* \$i)*)\) > \$i\)")
+    """Regex to get the arity of functions"""
+    _function_val_regex: re.Pattern = re.compile(r"(\w)\(([^)\s]+)\)\s*=\s*'fmb_\$i_(\d+)'")
+    """Regex to get the value mapping of functions"""
+    _function_input_regex: re.Pattern = re.compile(r"fmb_\$i_(\d+)")
+    """Regex to parse the inputs out of function mappings"""
+    _predicate_val_regex: re.Pattern = re.compile(r"(~?)(\w)\('fmb_\$i_(\d+)'\)")
+    """Regex to parse the truthiness of predicates"""
 
     @staticmethod
     def order_and_constants(result: str) -> tuple[str, int, dict[str, int]]:
@@ -225,7 +148,7 @@ class VampireOutputTools:
 
         Parameters
         ----------
-        result : str
+        result : str-
             Vampire output text
 
         Returns
@@ -236,7 +159,7 @@ class VampireOutputTools:
             Constants dict
         """        
         result = copy.copy(result)
-        matches = re.findall(VampireOutputTools.variable_regex, result)
+        matches = re.findall(VampireOutputTools._variable_regex, result)
 
         order: int = max([int(m[0]) for m in matches])
         constants: dict[str, int] = {c: i for i, (_, c) in enumerate(matches) if len(c)==1}
@@ -257,7 +180,7 @@ class VampireOutputTools:
         arities : dict[str, int]
             Arity of functions
         """        
-        matches = re.findall(VampireOutputTools.function_def_regex, result)
+        matches = re.findall(VampireOutputTools._function_def_regex, result)
         for m in matches:
             assert arities[m[0]] == m[1].count(r"$i")
     
@@ -283,7 +206,7 @@ class VampireOutputTools:
         np.ndarray
             _description_
         """        
-        matches = re.findall(VampireOutputTools.predicate_val_regex if predicate else VampireOutputTools.function_val_regex, result)
+        matches = re.findall(VampireOutputTools._predicate_val_regex if predicate else VampireOutputTools._function_val_regex, result)
         arr = np.full([order]*arity, -1, np.int8)
         func_id_idx = 1 if predicate else 0
         for m in matches:
@@ -304,23 +227,14 @@ class VampireOutputTools:
         return arr.astype(np.bool_) if predicate else arr
 
 class Model():
-    """A model to check logical expressions.
-    Assumes a prefix unitary proof operator
-
-    Members
-    -------
-    order: int
-        Order of the model
-    operation_tables: list[np.ndarray]
-        Tables for how each operation works
-    constant_table : list[int]
-        Table of the value of each constant
-    _arities: np.ndarray
-        Number of inputs for each operator (derived)
+    """A model to check logical expressions
     """    
     order: int
+    """Size of model"""
     operation_definitions: dict[OperationSpec, np.ndarray]
+    """Definition of each operation in the model"""
     constant_definitions: dict[ConstantSpec, int]
+    """Definition of each of the constants in the model"""
 
     def __init__(self, spec: ModelSpec, operation_definitions: dict[OperationSpec, np.ndarray] | None = None, 
                  constant_defnitions: dict[ConstantSpec, int] | None = None, model_filename: str | None = None) -> None:
@@ -345,17 +259,42 @@ class Model():
         self.order = self.operation_definitions[spec.operators[0]].shape[0]
 
     def calculate(self, op: OperationSpec, output_size: int, inputs: tuple[tuple[ModelArray, DimensionalReference], ...]) -> ModelArray:
-        #takes inputs, returns output with the fill so like [5, 2, 1] -> [3, 2, 4, 5] would give [5, 2, 1, 3, 4]
+        """Calculates the result table of an operation
+
+        Parameters
+        ----------
+        op : OperationSpec
+            Operation to apply
+        output_size : int
+            Expected size of output
+        inputs : tuple[tuple[ModelArray, DimensionalReference], ...]
+            Inputs
+
+        Returns
+        -------
+        ModelArray
+            Result
+        """        
         assert len(inputs)==op.default_table.ndim
-        #why wouldn't I just sort it?
-        #full_dimensions: DimensionalReference = fill_dimensions(full_fill)
-        reorganized_models: list[ModelArray] = [arr[*array_dimensional_reorganizer(output_size, sub_dims)] for arr, sub_dims in inputs]
+        reorganized_models: list[ModelArray] = [arr[*array_dimensional_resizer(output_size, sub_dims)] for arr, sub_dims in inputs]
         out = self._apply_function(self.operation_definitions[op], *reorganized_models)
         assert isinstance(out, np.ndarray)
         assert out.ndim == output_size
         return out
 
     def _get_values(self, vampire_form: str) -> list[OperationSpec | ConstantSpec | int]:
+        """Gets the operations constants and variables making up a expression
+
+        Parameters
+        ----------
+        vampire_form : str
+            vampire string form of expression
+
+        Returns
+        -------
+        list[OperationSpec | ConstantSpec | int]
+            Ordered values of the expression
+        """        
         stripped: str = vampire_form.replace('(', '').replace(')', '').replace(',', '')
         out: list[OperationSpec | ConstantSpec | int] = []
         var_table: dict[str, int] = {}
@@ -520,7 +459,9 @@ class Model():
         ----------
         vampire_form : str
             Vampire form of expression
-        probability : Union[Literal[&quot;Likely&quot;], Literal[&quot;Slow&quot;], Literal[&quot;Verify&quot;]], optional
+        compiled : list[CompiledElement | int | None] | None
+            Already compiled form, by default None
+        probability : Union[Literal["Likely"], Literal["Slow"], Literal["Verify"], Literal["Fastest"]]
             What tautology checker to use, by default "Fastest."
             In Verify mode all will be run and checked against eachother.
 
@@ -550,6 +491,20 @@ class Model():
             raise ValueError
         
     def apply_function(self, op: OperationSpec, *arr: ModelArray) -> int | np.ndarray:
+        """Applies an function from this model to an array
+
+        Parameters
+        ----------
+        op : OperationSpec
+            Operator of the function to use
+        arr : ModelArray
+            Inputs
+
+        Returns
+        -------
+        int | np.ndarray
+            Result
+        """        
         return self._apply_function(self.operation_definitions[op], *arr)
         
 CN_STANDARD_MODEL = Model(CN_SPEC)
@@ -562,8 +517,11 @@ class ModelTable():
     It's tautological under the target_model 
     """    
     spec: ModelSpec
+    """Spec for the ModelTable"""
     target_model: Model
+    """Targeted model to use"""
     counter_models: list[Model]
+    """Counter models"""
 
     def __init__(self, spec: ModelSpec, target_model: Model | None = None, counter_model_folder: str | None = None) -> None:
         self.spec = spec
@@ -659,6 +617,21 @@ class ModelTable():
                         valid_cm = True
             assert valid_cm
     
+    def counter_models_size_split(self, size: int) -> tuple[Iterable[Model], Iterable[Model]]:
+        """Returns the counter models below and equal to or above a specific size
+
+        Parameters
+        ----------
+        size : int
+            Size to split at
+
+        Returns
+        -------
+        tuple[Iterable[Model], Iterable[Model]]
+            Iterable across Models below the size
+            Iterable across Models equal to or above the size
+        """        
+        return [cm for cm in self.counter_models if cm.order < size], [cm for cm in self.counter_models if cm.order >= size]
 
 
 

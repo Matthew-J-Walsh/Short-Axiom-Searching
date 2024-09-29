@@ -26,7 +26,7 @@ class TreeForm:
     _RESONABLE_MAXIMUM_FULL_MODELING_SIZE: int
     """Above what size (order) model should full modeling be skipped and just individual formulas processed brute force"""
 
-    def __init__(self, lexographical_reference: tuple[OperationSpec | ConstantSpec, ...], prefix: OperationSpec, MAXIMUM_FULLY_CACHED_NODE_SIZE: int, RESONABLE_MAXIMUM_FULL_MODELING_SIZE: int = 0) -> None:
+    def __init__(self, lexographical_reference: tuple[OperationSpec | ConstantSpec, ...], prefix: OperationSpec, MAXIMUM_FULLY_CACHED_NODE_SIZE: int, RESONABLE_MAXIMUM_FULL_MODELING_SIZE: int = 3) -> None:
         assert prefix.arity==1, "Non-Unitary prefixes not implemented at this time"
         self.OPERATION_REFERENCE = tuple([ref for ref in lexographical_reference if isinstance(ref, OperationSpec)])
         self.CONSTANT_REFERENCE = tuple([ref for ref in lexographical_reference if isinstance(ref, ConstantSpec)])
@@ -42,6 +42,23 @@ class TreeForm:
 
     @functools.cache
     def _next_valid_node_size(self, size: int) -> int:
+        """Computes next allowable node size
+
+        Parameters
+        ----------
+        size : int
+            Previous Node Size
+
+        Returns
+        -------
+        int
+            Next allowable node size
+
+        Raises
+        ------
+        RuntimeError
+            Infinite loop
+        """        
         for i in range(100): #anti-infinite-loop
             size += 1
             if self._valid_node_size(size):
@@ -51,6 +68,20 @@ class TreeForm:
         
     @staticmethod
     def _node_size_combos(remaining_slots: int, remaining_size: int) -> Iterable[tuple[int, ...]]:
+        """Helper function for valid node size computation
+
+        Parameters
+        ----------
+        remaining_slots : int
+            Remaining number of node size groupings
+        remaining_size : int
+            Remaining number of subnodes to place into groupings
+
+        Yields
+        ------
+        Iterator[Iterable[tuple[int, ...]]]
+            All possible subnode groupings
+        """        
         if remaining_slots==1:
             yield (remaining_size, )
         else:
@@ -60,6 +91,18 @@ class TreeForm:
     
     @functools.cache
     def _valid_node_size(self, size: int) -> bool:
+        """Checks if a node size is valid
+
+        Parameters
+        ----------
+        size : int
+            Size to check
+
+        Returns
+        -------
+        bool
+            If size is a valid node size
+        """        
         if size==1:
             return True
         
@@ -149,7 +192,7 @@ class TreeForm:
                 self._initilize(external_degeneracy)
 
         def _reset_caches(self) -> None:
-            """Clears the cache
+            """Clears the caches
             """            
             self._cache = {}
             self._count_cache = None
@@ -168,13 +211,23 @@ class TreeForm:
 
         def _initilize(self, external_degeneracy: CountArray | None = None) -> None:
             """Initalizes the Node to the first valid Lexographical value.
-            """            
+
+            Parameters
+            ----------
+            external_degeneracy : CountArray | None, optional
+                The external counts of each possible node value to avoid degenerate trees, by default None
+            """                      
             self._value = -1
             self._reset_caches()
             assert self._iterate_value(external_degeneracy), "Malformation"
 
         def _iterate_value(self, external_degeneracy: CountArray | None = None) -> bool:
             """Iterates the value to next valid symbol
+
+            Parameters
+            ----------
+            external_degeneracy : CountArray | None, optional
+                The external counts of each possible node value to avoid degenerate trees, by default None
 
             Returns
             -------
@@ -193,6 +246,11 @@ class TreeForm:
                 
         def _initialize_at_value(self, external_degeneracy: CountArray | None = None) -> None:
             """Initalizes the Node at a particular value
+
+            Parameters
+            ----------
+            external_degeneracy : CountArray | None, optional
+                The external counts of each possible node value to avoid degenerate trees, by default None
             """            
             self._reset_caches()
             op: OperationSpec | ConstantSpec | None = self._current_value
@@ -337,11 +395,6 @@ class TreeForm:
         @property
         def counts(self) -> CountArray:
             """Count of each lexographical element in this node and all branches
-
-            Returns
-            -------
-            CountArray
-                Counts of each lexographical element
             """            
             if self._count_cache is None:
                 #typing hates this completely valid code
@@ -369,10 +422,14 @@ class TreeForm:
         
         @property
         def var_count(self) -> int:
+            """Number of variable slots in this node
+            """            
             return self.counts[-1]
         
         @property
         def branch_var_counts(self) -> tuple[int, ...]:
+            """Variable counts of each branch
+            """            
             return tuple([b.var_count for b in self.branches])
 
         def __str__(self) -> str:
@@ -382,7 +439,7 @@ class TreeForm:
             return self.vampire()
         
         def polish(self, fillin: Sequence[Any] | None = None) -> str:
-            """Get the polish expression this node represents
+            """The polish expression this node represents
 
             Parameters
             ----------
@@ -416,7 +473,7 @@ class TreeForm:
                 return ''.join(temp)
         
         def vampire(self, fillin: Sequence[Any] | None = None) -> str:
-            """Get the vampire expression this node represents
+            """The vampire expression this node represents
 
             Parameters
             ----------
@@ -492,6 +549,29 @@ class TreeForm:
                     break
                 self._process_cleaver_helper(cleaver, cm, "Upward")
 
+            #small_counter_models, big_counter_models = model_table.counter_models_size_split(self.tree._RESONABLE_MAXIMUM_FULL_MODELING_SIZE)
+            #for cm in small_counter_models:
+            #    if cleaver.empty:
+            #        break
+            #    self._process_cleaver_helper(cleaver, cm, "Upward")
+            #
+            #if not cleaver.empty:
+            #    for k in cleaver.cleaves.keys(): 
+            #        var_count = k.count(0)
+            #        cleave = CleavingMatrix.base_cleaver(var_count)
+            #        fill_iter = reversed(list(enumerate(fill_iterator(var_count))))
+            #        for i, fill in fill_iter:
+            #            if cleaver.constant_binding_empty(k):
+            #                break
+            #            if cleaver.cleaves[k][i]:
+            #                fill_dims: DimensionalReference = get_fill(fill)
+            #                j = -1
+            #                fillin: list[Any] = [fill_dims[(j := j + 1)] if k[i]==0 else self.tree.CONSTANT_REFERENCE[- k[i] - 1].vampire_symbol for i in range(cleaver.full_size)]
+            #                vamp: str = self.vampire(fillin)
+            #                for cm in big_counter_models:
+            #                    if cm("t("+vamp+")"):
+            #                        cleave *= fill_downward_cleave(i, var_count).astype(np.bool_)
+
             for k in cleaver.cleaves.keys():
                 for i, fill in enumerate(fill_iterator(k.count(0))):
                     fill_dims: DimensionalReference = get_fill(fill)
@@ -520,25 +600,40 @@ class TreeForm:
 
             return sum(c.sum() for c in cleaver.cleaves.values())
 
+        #@profile # type: ignore
         def _process_cleaver_helper(self, cleaver: CleavingMatrix, model: Model, cleave_direction: Literal["Upward"] | Literal["Downward"]) -> None:
+            """Helper function to calculate cleaves from a model
+
+            Parameters
+            ----------
+            cleaver : CleavingMatrix
+                Cleaver to adjust
+            model : Model
+                Model being used
+            cleave_direction : Literal[&quot;Upward&quot;] | Literal[&quot;Downward&quot;]
+                Upward for counter models
+                Downward for target models
+            """            
             if model.order > self.tree._RESONABLE_MAXIMUM_FULL_MODELING_SIZE:
                 for k in cleaver.cleaves.keys():
                     var_count = k.count(0)
-                    cleave = CleavingMatrix.base_cleaver(var_count)
-                    fill_iter = enumerate(fill_iterator(var_count)) if cleave_direction == "Downward" else reversed(list(enumerate(fill_iterator(var_count))))
+                    cleave: CleavingArray = CleavingMatrix.base_cleaver(var_count) if cleave_direction == "Downward" else np.logical_not(CleavingMatrix.base_cleaver(var_count))
+                    fill_iter: Iterable[tuple[int, FillPointer]] = enumerate(fill_iterator(var_count)) if cleave_direction == "Downward" else reversed(list(enumerate(fill_iterator(var_count))))
                     for i, fill in fill_iter:
+                        assert fill.point==i #TODO
+                        assert fill.size==var_count
                         fill_dims: DimensionalReference = get_fill(fill)
                         j = -1
                         fillin: list[Any] = [fill_dims[(j := j + 1)] if k[i]==0 else self.tree.CONSTANT_REFERENCE[- k[i] - 1].vampire_symbol for i in range(cleaver.full_size)]
-                        if cleaver.cleaves[k][i]:
+                        if (cleave[i] if cleave_direction == "Downward" else not cleave[i]) and cleaver.cleaves[k][i]:
                             vamp: str = self.vampire(fillin)
                             if model("t("+vamp+")"):
-                                cleave *= fill_downward_cleave(i, var_count).astype(np.bool_)
+                                if cleave_direction == "Downward":
+                                    cleave *= fill_downward_cleave(fill).astype(np.bool_)
+                                else: #cleave_direction == "Upward":
+                                    cleave = np.logical_or(cleave, fill_downward_cleave(fill).astype(np.bool_))
 
-                    if cleave_direction == "Downward":
-                        cleaver.cleaves[k] *= cleave
-                    else: #cleave_direction == "Upward":
-                        cleaver.cleaves[k] *= np.logical_not(cleave)
+                    cleaver.cleaves[k] *= cleave
 
             else:
                 full_model_evaluation = model.apply_function(self.tree.PREFIX, self.calculate(model, full_fill(cleaver.full_size)))
@@ -605,11 +700,6 @@ class TreeForm:
         @property
         def counts(self) -> CountArray:
             """Count of each lexographical element in this node and all branches
-
-            Returns
-            -------
-            CountArray
-                Counts of each lexographical element
             """            
             return self.cache[self.point].counts
                 
@@ -626,7 +716,7 @@ class TreeForm:
             return copyied
         
         def polish(self, fillin: Sequence[Any] | None = None) -> str:
-            """Get the polish expression this node represents
+            """The polish expression this node represents
 
             Parameters
             ----------
@@ -641,7 +731,7 @@ class TreeForm:
             return self.cache[self.point].polish(fillin)
         
         def vampire(self, fillin: Sequence[Any] | None = None) -> str:
-            """Get the vampire expression this node represents
+            """The vampire expression this node represents
 
             Parameters
             ----------
@@ -715,6 +805,20 @@ class TreeForm:
     
     @functools.cache
     def _formula_count_helper(self, size: int) -> tuple[tuple[tuple[OperationSpec, ...], int], ...]:
+        """Helper function for determining the number of possible formulas.
+        Returns a mapping from operations used to formula counts, 
+        must be in the form of a tuple rather than a dict for caching.
+
+        Parameters
+        ----------
+        size : int
+            Formula size to target
+
+        Returns
+        -------
+        tuple[tuple[tuple[OperationSpec, ...], int], ...]
+            Mapping from operations used to formula counts
+        """        
         if size==1:
             return (((), 1),)
         counts: dict[tuple[OperationSpec, ...], int] = {}
@@ -746,13 +850,20 @@ class TreeForm:
         Parameters
         ----------
         size : int
-            _description_
+            Formula size target
+        allow_degenerate : bool, optional
+            If degenerate formulas (not containing all lexographical elements) should be counted, by default False
 
         Returns
         -------
         int
-            _description_
-        """        
+            Total Count
+
+        Raises
+        ------
+        RuntimeError
+            No nondegenerate formulas
+        """         
         res: tuple[tuple[tuple[OperationSpec, ...], int], ...] = self._formula_count_helper(size)
         if not allow_degenerate:
             for s, c in res:
@@ -765,6 +876,24 @@ class TreeForm:
             return sum([c for s, c in res])
 
     def verify_formulas(self, size: int) -> None:
+        """Verifies the formulas generated by a tree.
+        Could be incorrect in 3 ways:
+        Repeated formulas,
+        Invalid formulas,
+        Not enough formulas
+
+        If none of those 3 issues exists its assumed that all formulas are being properly generated
+
+        Parameters
+        ----------
+        size : int
+            Size to verify for
+
+        Raises
+        ------
+        AssertionError
+            If formulas generated are in some way invalid
+        """        
         model: Model = Model(ModelSpec((self.PREFIX,) + self.OPERATION_REFERENCE, self.CONSTANT_REFERENCE))
         
         target_count: int = self.formula_count(size)
