@@ -16,51 +16,122 @@ import subprocess
 
 _VAMPIRE_MODUS_PONENS = "((t(X) & t(i(X,Y))) => t(Y))"
 
-class VampireWrapper(Protocol):
+class VampireWrapper:
+    excecutable_location: str
+    counter_modeling_formula_sets: list[list[str]]
+    counter_model_folder: str
+    model_spec: ModelSpec
+    command: list[str]
+    verification: bool
+
+    def __init__(self, executable_file: str, counter_modeling_formula_sets: list[list[str]], counter_model_folder: str, model_spec: ModelSpec,
+                 optional_args: dict[str, str] | None = None, optional_flags: list[str] | None = None, verify_models: bool = False):
+        self.excecutable_location = executable_file 
+        self.counter_modeling_formula_sets = counter_modeling_formula_sets
+        self.counter_model_folder = counter_model_folder
+        self.model_spec = model_spec
+
+        baseline_args = {
+            "-t": "240",
+            "-sa": "fmb",
+        }
+        if optional_args:
+            full_args: dict[str, str] = {**baseline_args, **optional_args}
+        else:
+            full_args = baseline_args
+
+        baseline_flags: list[str] = []
+        if optional_flags:
+            flags: list[str] = list(set(baseline_flags + optional_flags))
+        else:
+            flags = baseline_flags
+
+        self.command = [executable_file]
+        for flag in flags:
+            self.command.append(flag)
+        for arg, val in full_args.items():
+            self.command.append(arg)
+            self.command.append(val)
+
+        assert not "--fmb_start_size" in self.command, "--fmb_start_size is iterated on, don't give as input please"
+
+        self.verification = verify_models
+        
+    def _vampire_expression_to_fof_line(self, expression: str, name: str, type: Literal["axiom"] | Literal["conjecture"]) -> str:
+        vars: set[str] = {c for c in expression if c in VAMPIRE_VARIABLE_SYMBOLS}
+        return 'fof('+name+", "+type+", "+("!["+','.join(vars)+"]: " if len(vars)>0 else "")+expression+").\n"
+
+    def _generate_vampire_input_file(self, vampire_form: str, counter_model_set: list[str]) -> str:
+        if not os.path.exists("input_tmp"):
+            os.makedirs("input_tmp")
+
+        file_name: str = os.path.join("input_tmp", "vampire_run_"+str(datetime.now()))
+        for i in ['-', ' ', ':', '.']: 
+            file_name = file_name.replace(i, '')
+        file_name += '.p'
+
+        contents: str = ""
+        contents += self._vampire_expression_to_fof_line(_VAMPIRE_MODUS_PONENS, "mp", "axiom")
+        contents += self._vampire_expression_to_fof_line(vampire_form, "cand", "axiom")
+        contents += ''.join(self._vampire_expression_to_fof_line(("" if cons.predicate_orientation else "~")+self.model_spec.operators[0].vampire_symbol+"("+cons.vampire_symbol+")", "constant"+str(i), "axiom") 
+                            for i, cons in enumerate(self.model_spec.constants) if not cons.predicate_orientation is None)
+        contents += ''.join(self._vampire_expression_to_fof_line(counter, "counter"+str(i), "conjecture") for i, counter in enumerate(counter_model_set))
+
+        with open(file_name, 'w') as input_file:
+            input_file.write(contents)
+
+        return file_name
+
     def __call__(self, vampire_form: str) -> bool | Model:
-        raise NotImplementedError
-    
-def BLANK_VAMPIRE_WRAPPER(vampire_form: str) -> bool | Model:
-    return False
+        for fmb_start_size in [2, 6, 7, 8]:
+            for counter_formula_set in self.counter_modeling_formula_sets:
+                input_file_name: str = self._generate_vampire_input_file(vampire_form, counter_formula_set)
 
-def vampire_expression_to_fof_line(expression: str, name: str, type: Literal["axiom"] | Literal["conjecture"]) -> str:
-    vars: set[str] = {c for c in expression if c in VAMPIRE_VARIABLE_SYMBOLS}
-    return 'fof('+name+", "+type+", "+"!["+','.join(vars)+"]: "+expression+").\n"
+                result: str = subprocess.run(self.command + ["--fmb_start_size", str(fmb_start_size)] + [input_file_name], capture_output=True, text=True).stdout
 
-def _generate_vampire_input_file(vampire_form: str, counter_model_set: list[str]) -> str:
-    if not os.path.exists("input_tmp"):
-        os.makedirs("input_tmp")
+                if not "Finite Model Found!" in result:
+                    #print(result)
+                    #raise ValueError()
+                    os.remove(input_file_name)
+                    #continue
+                else:
+                    model: Model = Model(self.model_spec, model_filename = self.save_countermodel(result))
+                    if self.verification:
+                        assert model(vampire_form), str(model)+"\n"+vampire_form
+                        assert not all(model(counter_formula) for counter_formula in counter_formula_set), str(model)+"\n"+str(counter_formula_set)
 
-    file_name: str = os.path.join("input_tmp", "vampire_run_"+str(datetime.now()))
-    for i in ['-', ' ', ':', '.']: 
-        file_name = file_name.replace(i, '')
-    file_name += '.p'
+                    os.remove(input_file_name)
+                    return model
+                
+        return False
 
-    contents: str = ""
-    contents += vampire_expression_to_fof_line(_VAMPIRE_MODUS_PONENS, "mp", "axiom")
-    contents += vampire_expression_to_fof_line(vampire_form, "cand", "axiom")
-    contents += ''.join(vampire_expression_to_fof_line(counter, "counter"+str(i), "conjecture") for i, counter in enumerate(counter_model_set))
+    def wipe_counter_models(self) -> None:
+        if os.path.exists(self.counter_model_folder) and os.path.isdir(self.counter_model_folder):
+            for counter_model_filename in os.listdir(self.counter_model_folder):
+                os.remove(os.path.join(self.counter_model_folder, counter_model_filename))
 
-    with open(file_name, 'w') as input_file:
-        input_file.write(contents)
+    def save_countermodel(self, result: str) -> str:
+        try:
+            _, size, _ = VampireOutputTools.order_and_constants(result)
+            base_file_name: str = "countermodel-"+str(size)+"-"
+            c: int = 0
+            while True:
+                file_name: str = os.path.join(self.counter_model_folder, base_file_name + str(c))
+                if not os.path.exists(file_name):
+                    with open(file_name, 'w') as counter_model_file:
+                        counter_model_file.write(result)
+                        return file_name
+                c += 1
+        except:
+            print(result)
+            raise RuntimeError
+        
+class BlankVampireWrapper(VampireWrapper):
+    def __init__(self) -> None:
+        pass
 
-    return file_name
-
-def save_countermodel(result: str, folder: str) -> str:
-    try:
-        _, size, _ = VampireOutputTools.order_and_constants(result)
-        base_file_name: str = "countermodel-"+str(size)+"-"
-        c: int = 0
-        while True:
-            file_name: str = os.path.join(folder, base_file_name + str(c))
-            if not os.path.exists(file_name):
-                with open(file_name, 'w') as counter_model_file:
-                    counter_model_file.write(result)
-                    return file_name
-            c += 1
-    except:
-        print(result)
-        raise RuntimeError
+    def __call__(self, vampire_form: str) -> bool | Model:
+        return False
 
 def create_vampire_countermodel_instance(executable_file: str, counter_modeling_formula_sets: list[list[str]], counter_model_folder: str, model_spec: ModelSpec,
                                          optional_args: dict[str, str] | None = None, optional_flags: list[str] | None = None, verify_models: bool = False) -> VampireWrapper:
@@ -84,6 +155,7 @@ def create_vampire_countermodel_instance(executable_file: str, counter_modeling_
     VampireWrapper
         Function that calculates counter-models
     """    
+    raise DeprecationWarning
     baseline_args = {
         "-t": "240",
         "-sa": "fmb",
@@ -137,6 +209,7 @@ def create_vampire_countermodel_instance(executable_file: str, counter_modeling_
     return vampire_wrapper
 
 def wipe_counter_models(counter_model_folder: str) -> None:
+    raise DeprecationWarning
     if os.path.exists(counter_model_folder) and os.path.isdir(counter_model_folder):
         for counter_model_filename in os.listdir(counter_model_folder):
             os.remove(os.path.join(counter_model_folder, counter_model_filename))

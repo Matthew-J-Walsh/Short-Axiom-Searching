@@ -45,7 +45,9 @@ class ConstantSpec(NamedTuple):
     vampire_symbol: str
     """Symbol of the operation in vampire"""
     default_value: int
-    __hash__ = hash_tuple_with_ndarray
+    """Default constant value"""
+    predicate_orientation: bool | None
+    """What value the predicate of this constant should be, if any"""
 
 class ModelSpec(NamedTuple):
     """Spec for a model operators and constants for loading from a file"""    
@@ -73,9 +75,9 @@ CLASSICAL_IMPLICATION = OperationSpec("C", "i", 2, numpy_read_only_array([[1, 1]
 """Definition of classical implication function"""
 CLASSICAL_NEGATION = OperationSpec("N", "n", 1, numpy_read_only_array([1, 0]))
 """Definition of classical negation function"""
-CLASSICAL_TRUE = ConstantSpec("T", "o", 1)
+CLASSICAL_TRUE = ConstantSpec("T", "o", 1, True)
 """Definition of classical True constant"""
-CLASSICAL_FALSE = ConstantSpec("F", "o", 0)
+CLASSICAL_FALSE = ConstantSpec("F", "o", 0, False)
 """Definition of classical False constant"""
 
 CN_OPERATIONS: tuple[OperationSpec, ...] = (CLASSICAL_TRUTH, CLASSICAL_IMPLICATION, CLASSICAL_NEGATION)

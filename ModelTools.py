@@ -344,7 +344,7 @@ class Model():
             print(vampire_form)
             raise AssertionError
         function_stack: list[FunctionStackElement] = [FunctionStackElement(values[0], [values[0].arity], [])] #prefix arity
-        var_count: int = max((v for v in values if isinstance(v, int)), default = -1) + 1
+        var_count: int = max(v for v in values if isinstance(v, int)) + 1
         cons_list: list[ConstantSpec] = list(self.constant_definitions.keys())
         constant_indicies: dict[ConstantSpec, int] = {c: i+var_count for i, c in enumerate(cons_list)}
         compiled: list[CompiledElement | int | None] = [None] * var_count + [self.constant_definitions[c] for c in cons_list] # type: ignore
@@ -490,7 +490,7 @@ class Model():
         else:
             raise ValueError
         
-    def apply_function(self, op: OperationSpec, *arr: ModelArray) -> int | np.ndarray:
+    def apply_function(self, op: OperationSpec, *arr: ModelArray) -> int | ModelArray:
         """Applies an function from this model to an array
 
         Parameters

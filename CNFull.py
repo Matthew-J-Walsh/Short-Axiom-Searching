@@ -22,13 +22,13 @@ def FullCN() -> None:
     if not os.path.exists(unsolved_folder):
         os.makedirs(unsolved_folder)
 
-    vampire_wrapper: VampireWrapper = create_vampire_countermodel_instance(vampire_executable_file_path, counter_modeling_formula_sets, counter_model_folder, Models.spec, verify_models=True)
+    vampire_wrapper: VampireWrapper = VampireWrapper(vampire_executable_file_path, counter_modeling_formula_sets, counter_model_folder, Models.spec, verify_models=True)
 
-    for i in [18]:
+    for i in [14, 15, 16]:
         print("Starting length: "+str(i))
         start_time = time.time()
         unsolved_count, processed_count = CN.process_tree(i, Models, vampire_wrapper, os.path.join(unsolved_folder, "CN"+str(i)+"Rem.txt"))
-        
+
         print("Processed "+str(processed_count)+" formulas, Was unable to solve: "+str(unsolved_count))
     
         print("Execution time: "+str(time.time() - start_time))

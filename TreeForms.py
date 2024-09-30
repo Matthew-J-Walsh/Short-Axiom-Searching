@@ -367,8 +367,9 @@ class TreeForm:
                 return True
 
             #Remember to re-initialize when returning false so we return to "base" state.
-            self._initilize()
-            self._reset_caches()
+            if not isinstance(self, TreeForm.TopNode):
+                self._initilize()
+                self._reset_caches()
                 
             return False
 
@@ -452,7 +453,7 @@ class TreeForm:
                 Polish form
             """            
             cv: OperationSpec | ConstantSpec | None = self._current_value
-            polish = "_" if cv is None else cv.symbol + ''.join(b.polish(fillin) for b in self.branches)
+            polish = "_" if cv is None else cv.symbol + ''.join(b.polish(None) for b in self.branches)
 
             if fillin is None:
                 return polish
@@ -519,129 +520,6 @@ class TreeForm:
             while self.iterate(external_degeneracy):
                 yield self
 
-        #@profile # type: ignore
-        def process(self, model_table: ModelTable, vampire_wrapper: VampireWrapper, remaining_file: TextIOWrapper) -> tuple[int, int]:
-            """Fully processes this Node in its current state (without iterating it), creating new countermodels using vampire as needed.
-            Indeterminate expressions will be placed into the remaining file
-
-            Parameters
-            ----------
-            model_table : ModelTable
-                Tautology check and Countermodeling table
-            vampire_wrapper : Callable[[str], bool  |  Model]
-                Vampire function, returns False if no model was found, otherwise returns the model
-            remaining_file : str
-                File to place the indeterminate expressions (Tautological but Un-countermodeled) into
-
-            Returns
-            -------
-            tuple[int, int]
-                How many unsolved expressions were added to the remaining file
-                How many expressions were processed
-            """            
-
-            var_count: int = self.counts[-1]
-            cleaver = CleavingMatrix(var_count, len(self.tree.CONSTANT_REFERENCE))
-
-            self._process_cleaver_helper(cleaver, model_table.target_model, "Downward")
-            
-            for cm in model_table.counter_models:
-                if cleaver.empty:
-                    break
-                self._process_cleaver_helper(cleaver, cm, "Upward")
-
-            #small_counter_models, big_counter_models = model_table.counter_models_size_split(self.tree._RESONABLE_MAXIMUM_FULL_MODELING_SIZE)
-            #for cm in small_counter_models:
-            #    if cleaver.empty:
-            #        break
-            #    self._process_cleaver_helper(cleaver, cm, "Upward")
-            #
-            #if not cleaver.empty:
-            #    for k in cleaver.cleaves.keys(): 
-            #        var_count = k.count(0)
-            #        cleave = CleavingMatrix.base_cleaver(var_count)
-            #        fill_iter = reversed(list(enumerate(fill_iterator(var_count))))
-            #        for i, fill in fill_iter:
-            #            if cleaver.constant_binding_empty(k):
-            #                break
-            #            if cleaver.cleaves[k][i]:
-            #                fill_dims: DimensionalReference = get_fill(fill)
-            #                j = -1
-            #                fillin: list[Any] = [fill_dims[(j := j + 1)] if k[i]==0 else self.tree.CONSTANT_REFERENCE[- k[i] - 1].vampire_symbol for i in range(cleaver.full_size)]
-            #                vamp: str = self.vampire(fillin)
-            #                for cm in big_counter_models:
-            #                    if cm("t("+vamp+")"):
-            #                        cleave *= fill_downward_cleave(i, var_count).astype(np.bool_)
-
-            for k in cleaver.cleaves.keys():
-                for i, fill in enumerate(fill_iterator(k.count(0))):
-                    fill_dims: DimensionalReference = get_fill(fill)
-                    j = -1
-                    fillin: list[Any] = [fill_dims[(j := j + 1)] if k[i]==0 else -k[i] for i in range(var_count)]
-
-                    if cleaver.cleaves[k][i]:
-                        vamp: str = self.vampire(fillin)
-
-                        if VERIFY_ALL_FORMULAS:
-                            assert not any(cm("t("+vamp+")") for cm in model_table.counter_models)
-                            assert model_table.target_model("t("+vamp+")"), vamp+"\n"+str(i)+"\n"+str(fillin)
-
-                        vampire_result: bool | Model = vampire_wrapper(vamp)
-                        if vampire_result==False:
-                            remaining_file.write(self.vampire(fillin)+"\n")
-                        else:
-                            assert isinstance(vampire_result, Model), "Vampire wrapper shouldn't return True, only models or false."
-                            model_table += vampire_result
-                            self._process_cleaver_helper(cleaver, vampire_result, "Upward")
-                            if VERIFY_ALL_FORMULAS:
-                                assert not cleaver.cleaves[k][i]
-                    elif VERIFY_ALL_FORMULAS:
-                        vamp: str = self.vampire(fillin)
-                        assert not model_table.target_model("t("+vamp+")") or any(cm("t("+vamp+")") for cm in model_table.counter_models), vamp+"\n"+str(i)+"\n"+str(fillin)
-
-            return sum(c.sum() for c in cleaver.cleaves.values()), sum(c.shape[0] for c in cleaver.cleaves.values())
-
-        #@profile # type: ignore
-        def _process_cleaver_helper(self, cleaver: CleavingMatrix, model: Model, cleave_direction: Literal["Upward"] | Literal["Downward"]) -> None:
-            """Helper function to calculate cleaves from a model
-
-            Parameters
-            ----------
-            cleaver : CleavingMatrix
-                Cleaver to adjust
-            model : Model
-                Model being used
-            cleave_direction : Literal[&quot;Upward&quot;] | Literal[&quot;Downward&quot;]
-                Upward for counter models
-                Downward for target models
-            """            
-            if model.order > self.tree._RESONABLE_MAXIMUM_FULL_MODELING_SIZE:
-                for k in cleaver.cleaves.keys():
-                    var_count = k.count(0)
-                    cleave: CleavingArray = CleavingMatrix.base_cleaver(var_count) if cleave_direction == "Downward" else np.logical_not(CleavingMatrix.base_cleaver(var_count))
-                    fill_iter: Iterable[tuple[int, FillPointer]] = enumerate(fill_iterator(var_count)) if cleave_direction == "Downward" else reversed(list(enumerate(fill_iterator(var_count))))
-                    for i, fill in fill_iter:
-                        assert fill.point==i #TODO
-                        assert fill.size==var_count
-                        fill_dims: DimensionalReference = get_fill(fill)
-                        j = -1
-                        fillin: list[Any] = [fill_dims[(j := j + 1)] if k[i]==0 else self.tree.CONSTANT_REFERENCE[- k[i] - 1].vampire_symbol for i in range(cleaver.full_size)]
-                        if (cleave[i] if cleave_direction == "Downward" else not cleave[i]) and cleaver.cleaves[k][i]:
-                            vamp: str = self.vampire(fillin)
-                            if model("t("+vamp+")"):
-                                if cleave_direction == "Downward":
-                                    cleave *= fill_downward_cleave(fill).astype(np.bool_)
-                                else: #cleave_direction == "Upward":
-                                    cleave = np.logical_or(cleave, fill_downward_cleave(fill).astype(np.bool_))
-
-                    cleaver.cleaves[k] *= cleave
-
-            else:
-                full_model_evaluation = model.apply_function(self.tree.PREFIX, self.calculate(model, full_fill(cleaver.full_size)))
-                assert not isinstance(full_model_evaluation, int)
-                assert full_model_evaluation.dtype == np.bool_
-                cleaver *= fill_result_disassembly_application(full_model_evaluation, [model.constant_definitions[cons] for cons in self.tree.CONSTANT_REFERENCE], cleave_direction)
-    
     class PsudeoNode(Node):
         """A PsudeoNode acts like a Node but actually just indexes a known list of every possible node of that length 
         """        
@@ -772,6 +650,252 @@ class TreeForm:
             current_node.freeze()
             cache.append(current_node)
 
+    class TopNode(Node):
+        def __init__(self, tree: TreeForm, size: int, external_degeneracy: CountArray | None = None) -> None:
+            self.tree = tree
+            self.size = size
+            self.branches = [self.tree.new_node(size, external_degeneracy)]
+            self._frozen = False
+            self._reset_caches()
+
+        def _iterate_value(self, external_degeneracy: CountArray | None = None) -> bool:
+            return False
+        
+        def calculate(self, model: Model, fill: FillPointer) -> ModelArray:
+            """Calculates the Node's truth table for a particular model
+
+            Parameters
+            ----------
+            model : Model
+                Model to calculate for
+            fill : FillArray
+                Fill to calculate with (currently just generates everything)
+
+            Returns
+            -------
+            ModelArray
+                Result array
+            """           
+            res = model.apply_function(self.tree.PREFIX, *[b.calculate(model, fill) for b in self.branches])
+            assert not isinstance(res, int)
+            return res
+        
+        @property
+        def counts(self) -> CountArray:
+            """Count of each lexographical element in this node and all branches
+            """            
+            if self._count_cache is None:
+                #typing hates this completely valid code
+                if len(self.branches)==0:
+                    self._count_cache = np.zeros(len(self.tree.OPERATION_REFERENCE)+1, dtype=np.int8) # type: ignore
+                else:
+                    self._count_cache = sum([b.counts for b in self.branches]) # type: ignore
+                self._count_cache.setflags(write = False) # type: ignore
+            return self._count_cache # type: ignore
+        
+        def polish(self, fillin: Sequence[Any] | None = None) -> str:
+            """The polish expression this node represents
+
+            Parameters
+            ----------
+            fill_dims : Sequence[Any] | None, optional
+                Fill to use, otherwise provides the standard '_'s
+
+            Returns
+            -------
+            str
+                Polish form
+            """            
+            polish = self.tree.PREFIX.symbol + ''.join(b.polish(None) for b in self.branches)
+
+            if fillin is None:
+                return polish
+            else:
+                assert len(fillin) == polish.count("_")
+                i = -1
+                temp: list[Any] = []
+                for c in polish:
+                    if c == "_":
+                        if fillin[i] >= 0:
+                            temp.append(VARIABLE_SYMBOLS[fillin[i]])
+                            i += 1
+                        else:
+                            temp.append(self.tree.CONSTANT_REFERENCE[- fillin[i] - 1].symbol)
+                    else:
+                        temp.append(c)
+
+                return ''.join(temp)
+        
+        def vampire(self, fillin: Sequence[Any] | None = None) -> str:
+            """The vampire expression this node represents
+
+            Parameters
+            ----------
+            fill_dims : Sequence[Any] | None, optional
+                Fill to use, otherwise provides the standard '_'s
+
+            Returns
+            -------
+            str
+                Vampire form
+            """            
+            if self._vampire_cache is None:
+                self._vampire_cache = self.tree.PREFIX.vampire_symbol + "(" + ','.join(b.vampire(None) for b in self.branches) + ")"
+            
+            if fillin is None:
+                return self._vampire_cache
+            else:
+                assert len(fillin) == self._vampire_cache.count("_")
+                i = 0
+                temp: list[Any] = []
+                for c in self._vampire_cache:
+                    if c == "_":
+                        if fillin[i] >= 0:
+                            temp.append(VAMPIRE_VARIABLE_SYMBOLS[fillin[i]])
+                            i += 1
+                        else:
+                            temp.append(self.tree.CONSTANT_REFERENCE[- fillin[i] - 1].vampire_symbol)
+                    else:
+                        temp.append(c)
+
+                return ''.join(temp)
+            
+        def get_iterator(self, external_degeneracy: CountArray) -> Iterable[TreeForm.TopNode]:
+            """Yields iterations self until self.iterate() returns False.
+
+            Yields
+            ------
+            TreeForm.Node
+                This node in increasingly iterated forms
+            """            
+            yield self
+            while self.iterate(external_degeneracy):
+                yield self
+        
+        #@profile # type: ignore
+        def process(self, model_table: ModelTable, vampire_wrapper: VampireWrapper, remaining_file: TextIOWrapper) -> tuple[int, int]:
+            """Fully processes this Node in its current state (without iterating it), creating new countermodels using vampire as needed.
+            Indeterminate expressions will be placed into the remaining file
+
+            Parameters
+            ----------
+            model_table : ModelTable
+                Tautology check and Countermodeling table
+            vampire_wrapper : Callable[[str], bool  |  Model]
+                Vampire function, returns False if no model was found, otherwise returns the model
+            remaining_file : str
+                File to place the indeterminate expressions (Tautological but Un-countermodeled) into
+
+            Returns
+            -------
+            tuple[int, int]
+                How many unsolved expressions were added to the remaining file
+                How many expressions were processed
+            """            
+
+            var_count: int = self.counts[-1]
+            cleaver = CleavingMatrix(var_count, len(self.tree.CONSTANT_REFERENCE))
+
+            self._process_cleaver_helper(cleaver, model_table.target_model, "Downward")
+            
+            for cm in model_table.counter_models:
+                if cleaver.empty:
+                    break
+                self._process_cleaver_helper(cleaver, cm, "Upward")
+
+            #small_counter_models, big_counter_models = model_table.counter_models_size_split(self.tree._RESONABLE_MAXIMUM_FULL_MODELING_SIZE)
+            #for cm in small_counter_models:
+            #    if cleaver.empty:
+            #        break
+            #    self._process_cleaver_helper(cleaver, cm, "Upward")
+            #
+            #if not cleaver.empty:
+            #    for k in cleaver.cleaves.keys(): 
+            #        var_count = k.count(0)
+            #        cleave = CleavingMatrix.base_cleaver(var_count)
+            #        fill_iter = reversed(list(enumerate(fill_iterator(var_count))))
+            #        for i, fill in fill_iter:
+            #            if cleaver.constant_binding_empty(k):
+            #                break
+            #            if cleaver.cleaves[k][i]:
+            #                fill_dims: DimensionalReference = get_fill(fill)
+            #                j = -1
+            #                fillin: list[Any] = [fill_dims[(j := j + 1)] if k[i]==0 else self.tree.CONSTANT_REFERENCE[- k[i] - 1].vampire_symbol for i in range(cleaver.full_size)]
+            #                vamp: str = self.vampire(fillin)
+            #                for cm in big_counter_models:
+            #                    if cm("t("+vamp+")"):
+            #                        cleave *= fill_downward_cleave(i, var_count).astype(np.bool_)
+
+            for k in cleaver.cleaves.keys():
+                for i, fill in enumerate(fill_iterator(k.count(0))):
+                    fill_dims: DimensionalReference = get_fill(fill)
+                    j = -1
+                    fillin: list[Any] = [fill_dims[(j := j + 1)] if k[i]==0 else -k[i] for i in range(var_count)]
+
+                    if cleaver.cleaves[k][i]:
+                        vamp: str = self.vampire(fillin)
+
+                        if VERIFY_ALL_FORMULAS:
+                            assert not any(cm(vamp) for cm in model_table.counter_models)
+                            assert model_table.target_model(vamp), vamp+"\n"+str(i)+"\n"+str(fillin)
+
+                        vampire_result: bool | Model = vampire_wrapper(vamp)
+                        if vampire_result==False:
+                            remaining_file.write(self.vampire(fillin)+"\n")
+                        else:
+                            assert isinstance(vampire_result, Model), "Vampire wrapper shouldn't return True, only models or false."
+                            model_table += vampire_result
+                            self._process_cleaver_helper(cleaver, vampire_result, "Upward")
+                            if VERIFY_ALL_FORMULAS:
+                                assert not cleaver.cleaves[k][i]
+                    elif VERIFY_ALL_FORMULAS:
+                        vamp: str = self.vampire(fillin)
+                        assert not model_table.target_model(vamp) or any(cm(vamp) for cm in model_table.counter_models), vamp+"\n"+str(i)+"\n"+str(fillin)
+
+            return sum(c.sum() for c in cleaver.cleaves.values()), sum(c.shape[0] for c in cleaver.cleaves.values())
+
+        #@profile # type: ignore
+        def _process_cleaver_helper(self, cleaver: CleavingMatrix, model: Model, cleave_direction: Literal["Upward"] | Literal["Downward"]) -> None:
+            """Helper function to calculate cleaves from a model
+
+            Parameters
+            ----------
+            cleaver : CleavingMatrix
+                Cleaver to adjust
+            model : Model
+                Model being used
+            cleave_direction : Literal[&quot;Upward&quot;] | Literal[&quot;Downward&quot;]
+                Upward for counter models
+                Downward for target models
+            """            
+            if model.order > self.tree._RESONABLE_MAXIMUM_FULL_MODELING_SIZE:
+                for k in cleaver.cleaves.keys():
+                    var_count = k.count(0)
+                    cleave: CleavingArray = CleavingMatrix.base_cleaver(var_count) if cleave_direction == "Downward" else np.logical_not(CleavingMatrix.base_cleaver(var_count))
+                    fill_iter: Iterable[tuple[int, FillPointer]] = enumerate(fill_iterator(var_count)) if cleave_direction == "Downward" else reversed(list(enumerate(fill_iterator(var_count))))
+                    for i, fill in fill_iter:
+                        assert fill.point==i #TODO
+                        assert fill.size==var_count
+                        fill_dims: DimensionalReference = get_fill(fill)
+                        j = -1
+                        fillin: list[Any] = [fill_dims[(j := j + 1)] if k[i]==0 else self.tree.CONSTANT_REFERENCE[- k[i] - 1].vampire_symbol for i in range(cleaver.full_size)]
+                        if (cleave[i] if cleave_direction == "Downward" else not cleave[i]) and cleaver.cleaves[k][i]:
+                            vamp: str = self.vampire(fillin)
+                            if model(vamp):
+                                if cleave_direction == "Downward":
+                                    cleave *= fill_downward_cleave(fill).astype(np.bool_)
+                                else: #cleave_direction == "Upward":
+                                    cleave = np.logical_or(cleave, fill_downward_cleave(fill).astype(np.bool_))
+
+                    cleaver.cleaves[k] *= cleave
+
+            else:
+                full_model_evaluation = self.calculate(model, full_fill(cleaver.full_size))#model.apply_function(self.tree.PREFIX, self.calculate(model, full_fill(cleaver.full_size)))
+                assert not isinstance(full_model_evaluation, int)
+                assert full_model_evaluation.dtype == np.bool_
+                cleaver *= fill_result_disassembly_application(full_model_evaluation, [model.constant_definitions[cons] for cons in self.tree.CONSTANT_REFERENCE], cleave_direction)
+    
+
     def process_tree(self, size: int, model_table: ModelTable, vampire_wrapper: VampireWrapper, remaining_filename: str) -> tuple[int, int]:
         """Processes this entire Tree species at a particular size into a file
 
@@ -798,9 +922,9 @@ class TreeForm:
 
         i = 0
         with open(remaining_filename, 'w') as remaining_file:
-            for state in self.new_node(size, default_degeneracy).get_iterator(default_degeneracy):
+            for state in self.TopNode(self, size, default_degeneracy).get_iterator(default_degeneracy):
                 i += 1
-                new_unsolved, new_processed = state.process(model_table, lambda vampire_form: vampire_wrapper(self.PREFIX.vampire_symbol+"("+vampire_form+")"), remaining_file)
+                new_unsolved, new_processed = state.process(model_table, vampire_wrapper, remaining_file)
                 unsolved_count += new_unsolved
                 total_processed += new_processed
         
