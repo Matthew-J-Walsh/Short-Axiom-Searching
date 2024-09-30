@@ -466,7 +466,7 @@ class TreeForm:
                             temp.append(VARIABLE_SYMBOLS[fillin[i]])
                             i += 1
                         else:
-                            temp.append(self.tree.CONSTANT_REFERENCE[- fillin[i] - 1])
+                            temp.append(self.tree.CONSTANT_REFERENCE[- fillin[i] - 1].symbol)
                     else:
                         temp.append(c)
 
@@ -501,7 +501,7 @@ class TreeForm:
                             temp.append(VAMPIRE_VARIABLE_SYMBOLS[fillin[i]])
                             i += 1
                         else:
-                            temp.append(self.tree.CONSTANT_REFERENCE[- fillin[i] - 1])
+                            temp.append(self.tree.CONSTANT_REFERENCE[- fillin[i] - 1].vampire_symbol)
                     else:
                         temp.append(c)
 
@@ -520,7 +520,7 @@ class TreeForm:
                 yield self
 
         #@profile # type: ignore
-        def process(self, model_table: ModelTable, vampire_wrapper: VampireWrapper, remaining_file: TextIOWrapper, debugging_verification: bool = False) -> int:
+        def process(self, model_table: ModelTable, vampire_wrapper: VampireWrapper, remaining_file: TextIOWrapper) -> tuple[int, int]:
             """Fully processes this Node in its current state (without iterating it), creating new countermodels using vampire as needed.
             Indeterminate expressions will be placed into the remaining file
 
@@ -535,8 +535,9 @@ class TreeForm:
 
             Returns
             -------
-            int
+            tuple[int, int]
                 How many unsolved expressions were added to the remaining file
+                How many expressions were processed
             """            
 
             var_count: int = self.counts[-1]
@@ -576,12 +577,12 @@ class TreeForm:
                 for i, fill in enumerate(fill_iterator(k.count(0))):
                     fill_dims: DimensionalReference = get_fill(fill)
                     j = -1
-                    fillin: list[Any] = [fill_dims[(j := j + 1)] if k[i]==0 else self.tree.CONSTANT_REFERENCE[- k[i] - 1].vampire_symbol for i in range(var_count)]
+                    fillin: list[Any] = [fill_dims[(j := j + 1)] if k[i]==0 else -k[i] for i in range(var_count)]
 
                     if cleaver.cleaves[k][i]:
                         vamp: str = self.vampire(fillin)
 
-                        if debugging_verification:
+                        if VERIFY_ALL_FORMULAS:
                             assert not any(cm("t("+vamp+")") for cm in model_table.counter_models)
                             assert model_table.target_model("t("+vamp+")"), vamp+"\n"+str(i)+"\n"+str(fillin)
 
@@ -592,13 +593,13 @@ class TreeForm:
                             assert isinstance(vampire_result, Model), "Vampire wrapper shouldn't return True, only models or false."
                             model_table += vampire_result
                             self._process_cleaver_helper(cleaver, vampire_result, "Upward")
-                            if debugging_verification:
+                            if VERIFY_ALL_FORMULAS:
                                 assert not cleaver.cleaves[k][i]
-                    elif debugging_verification:
+                    elif VERIFY_ALL_FORMULAS:
                         vamp: str = self.vampire(fillin)
                         assert not model_table.target_model("t("+vamp+")") or any(cm("t("+vamp+")") for cm in model_table.counter_models), vamp+"\n"+str(i)+"\n"+str(fillin)
 
-            return sum(c.sum() for c in cleaver.cleaves.values())
+            return sum(c.sum() for c in cleaver.cleaves.values()), sum(c.shape[0] for c in cleaver.cleaves.values())
 
         #@profile # type: ignore
         def _process_cleaver_helper(self, cleaver: CleavingMatrix, model: Model, cleave_direction: Literal["Upward"] | Literal["Downward"]) -> None:
@@ -771,7 +772,7 @@ class TreeForm:
             current_node.freeze()
             cache.append(current_node)
 
-    def process_tree(self, size: int, model_table: ModelTable, vampire_wrapper: VampireWrapper, remaining_filename: str) -> int:
+    def process_tree(self, size: int, model_table: ModelTable, vampire_wrapper: VampireWrapper, remaining_filename: str) -> tuple[int, int]:
         """Processes this entire Tree species at a particular size into a file
 
         Parameters
@@ -787,21 +788,23 @@ class TreeForm:
 
         Returns
         -------
-        int
+        tuple[int, int]
             How many unsolved expressions were added to the remaining file
+            How many expressions were processed
         """        
         unsolved_count = 0
+        total_processed = 0
         default_degeneracy = np.zeros(len(self.OPERATION_REFERENCE)+1, dtype=np.int8)
 
         i = 0
         with open(remaining_filename, 'w') as remaining_file:
             for state in self.new_node(size, default_degeneracy).get_iterator(default_degeneracy):
                 i += 1
-                unsolved_count += state.process(model_table, lambda vampire_form: vampire_wrapper(self.PREFIX.vampire_symbol+"("+vampire_form+")"), remaining_file)
+                new_unsolved, new_processed = state.process(model_table, lambda vampire_form: vampire_wrapper(self.PREFIX.vampire_symbol+"("+vampire_form+")"), remaining_file)
+                unsolved_count += new_unsolved
+                total_processed += new_processed
         
-        print("Processed "+str(i)+" formulas.")
-        
-        return unsolved_count
+        return unsolved_count, total_processed
     
     @functools.cache
     def _formula_count_helper(self, size: int) -> tuple[tuple[tuple[OperationSpec, ...], int], ...]:
