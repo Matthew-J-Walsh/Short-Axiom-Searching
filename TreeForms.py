@@ -795,7 +795,7 @@ class TreeForm:
                 How many expressions were processed
             """            
 
-            var_count: int = self.counts[-1]
+            var_count: int = self.var_count
             cleaver = CleavingMatrix(var_count, len(self.tree.CONSTANT_REFERENCE))
 
             self._process_cleaver_helper(cleaver, model_table.target_model, "Downward")
@@ -888,7 +888,7 @@ class TreeForm:
                         assert fill.size==var_count
                         fill_dims: DimensionalReference = get_fill(fill)
                         j = -1
-                        fillin: list[Any] = [fill_dims[(j := j + 1)] if k[i]==0 else self.tree.CONSTANT_REFERENCE[- k[i] - 1].vampire_symbol for i in range(cleaver.full_size)]
+                        fillin: list[Any] = [fill_dims[(j := j + 1)] if k[i]==0 else -k[i] for i in range(var_count)]
                         if (cleave[i] if cleave_direction == "Downward" else not cleave[i]) and cleaver.cleaves[k][i]:
                             vamp: str = self.vampire(fillin)
                             if model(vamp):
@@ -1040,13 +1040,20 @@ class TreeForm:
         count = 0
         expressions: set[str] = set()
         for state in self.TopNode(self, size, default_degeneracy).get_iterator(default_degeneracy):
-            count += sum([c.shape[0] for c in CleavingMatrix(state.var_count, len(self.CONSTANT_REFERENCE)).cleaves.values()])
+            cleaver = CleavingMatrix(state.var_count, len(self.CONSTANT_REFERENCE))
+            count += sum([c.shape[0] for c in cleaver.cleaves.values()])
             vamp = state.vampire()
-            expressions.add(vamp)
             try:
                 model.compile_expression(vamp)
             except:
                 raise AssertionError("Unverifiable form: "+vamp)
+            for k in cleaver.cleaves.keys():
+                var_count = k.count(0)
+                for i, fill in enumerate(fill_iterator(var_count)):
+                    fill_dims: DimensionalReference = get_fill(fill)
+                    j = -1
+                    fillin: list[Any] = [fill_dims[(j := j + 1)] if k[i]==0 else -k[i] for i in range(state.var_count)]
+                    expressions.add(state.vampire(fillin))
             #print(vamp)#str(count)+":"+
         
         assert count == target_count and count == len(expressions), "Counts: "+str(count)+" "+str(target_count)+" "+str(len(expressions))

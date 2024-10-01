@@ -16,6 +16,8 @@ def FullC0() -> None:
 
     C0 = TreeForm(C_OPERATIONS[1:]+C0_CONSTANTS, C_OPERATIONS[0], 15)
 
+    C0.verify_formulas(9)
+
     Models = ModelTable(C0_SPEC, counter_model_folder=counter_model_folder)
     Models.verify_counter_model_sets(counter_modeling_formula_sets)
 
