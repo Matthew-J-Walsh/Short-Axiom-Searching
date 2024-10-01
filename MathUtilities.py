@@ -52,8 +52,35 @@ def bells(n: int) -> int:
         v += binomial(n-1, k) * bells(k)
     return v
 
+def degenerate_constant_combinations(n: int) -> int:
+    """Number of degenerate constant and variable combinations for n slots
+
+    Parameters
+    ----------
+    n : int
+        Number of slots
+
+    Returns
+    -------
+    int
+        Number of degenerate constant and variable combinations
+    """    
+    return sum(binomial(n, i) * bells(i) for i in range(0, n+1))
     
-    
+def nondegenerate_constant_combinations(n: int) -> int:
+    """Number of non-degenerate constant and variable combinations for n slots
+
+    Parameters
+    ----------
+    n : int
+        Number of slots
+
+    Returns
+    -------
+    int
+        Number of non-degenerate constant and variable combinations
+    """    
+    return sum(binomial(n, i) * bells(i) for i in range(1, n))
     
     
     

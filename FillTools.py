@@ -466,8 +466,10 @@ def fill_disassembly_specified_fill_pairings(evaluation: ModelArray, constants: 
     fill_pairings: dict[tuple[int, ...], list[FillPointer]] = {}
     falses = np.vstack(np.logical_not(evaluation).nonzero())
     for i in range(falses.shape[1]):
-        constant_possibilities = [[0] + [k for k, c in enumerate(constants) if c==falses[j, i]] for j in range(evaluation.ndim)]
+        constant_possibilities = [[0] + [k+1 for k, c in enumerate(constants) if c==falses[j, i]] for j in range(evaluation.ndim)]
         for constant_combination in itertools.product(*constant_possibilities):
+            if any(constant_combination.count(k)==0 for k in range(len(constants)+1)):
+                continue
             reduced_point: np.ndarray[Any, np.dtype[np.int8]] = np.array([pv for ccv, pv in zip(constant_combination, falses[:, i]) if ccv==0], dtype=np.int8)
             new_point: FillPointer = point_to_fill(tuple(reduced_point))
             assert new_point.size == len(reduced_point), tuple(reduced_point)

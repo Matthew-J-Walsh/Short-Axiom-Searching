@@ -392,7 +392,7 @@ class Model():
         assert len(args) == len(table.shape), "Not enough inputs to function."
         return table[*args]
     
-    def _check_tautological_slow(self, compiled: list[CompiledElement | int | None]) -> bool:
+    def _check_tautological_slow(self, compiled: list[CompiledElement | int | None]) -> tuple[bool, list[int | bool] | None]:
         """Brute force tautological check without numpy
 
         Parameters
@@ -418,11 +418,11 @@ class Model():
                 else:
                     result.append(func.table[*[result[j] for j in func.inputs]]) # type: ignore
             if not result[-1]:
-                return False#, np.array(result)
+                return False, result
             
-        return True#, np.zeros(0)
+        return True, None
     
-    def _check_tautological_likely(self, compiled: list[CompiledElement | int | None]) -> bool:
+    def _check_tautological_likely(self, compiled: list[CompiledElement | int | None]) -> tuple[bool, np.ndarray | None]:
         """Brute force tautological check with numpy
 
         Parameters
@@ -449,7 +449,7 @@ class Model():
             else:
                 results.append(func.table[*[results[j] for j in func.inputs]])
         
-        return bool(results[-1].all())#, np.argwhere(results[-1]==0)
+        return bool(results[-1].all()), np.argwhere(results[-1]==0)
     
     def __call__(self, vampire_form: str, compiled: list[CompiledElement | int | None] | None = None,
                            probability: Union[Literal["Likely"], Literal["Slow"], Literal["Verify"], Literal["Fastest"]] = "Fastest") -> bool:
@@ -479,12 +479,12 @@ class Model():
             compiled = self.compile_expression(vampire_form)
 
         if probability=="Likely" or probability=="Fastest":
-            return self._check_tautological_likely(compiled)
+            return self._check_tautological_likely(compiled)[0]
         elif probability=="Slow":
-            return self._check_tautological_slow(compiled)
+            return self._check_tautological_slow(compiled)[0]
         elif probability=="Verify":
-            l: bool = self._check_tautological_likely(compiled)
-            sl: bool = self._check_tautological_slow(compiled)
+            l: bool = self._check_tautological_likely(compiled)[0]
+            sl: bool = self._check_tautological_slow(compiled)[0]
             assert l==sl, str(l)+", "+str(sl)
             return l
         else:

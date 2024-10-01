@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from Globals import *
+from MathUtilities import degenerate_constant_combinations, nondegenerate_constant_combinations
 from ModelTools import *
 from VampireUtils import *
 from FillTools import *
@@ -652,6 +653,7 @@ class TreeForm:
 
     class TopNode(Node):
         def __init__(self, tree: TreeForm, size: int, external_degeneracy: CountArray | None = None) -> None:
+            assert tree.PREFIX.arity==1, "only implemented for 1 at the moment"
             self.tree = tree
             self.size = size
             self.branches = [self.tree.new_node(size, external_degeneracy)]
@@ -752,9 +754,9 @@ class TreeForm:
                     if c == "_":
                         if fillin[i] >= 0:
                             temp.append(VAMPIRE_VARIABLE_SYMBOLS[fillin[i]])
-                            i += 1
                         else:
                             temp.append(self.tree.CONSTANT_REFERENCE[- fillin[i] - 1].vampire_symbol)
+                        i += 1
                     else:
                         temp.append(c)
 
@@ -828,16 +830,21 @@ class TreeForm:
 
             for k in cleaver.cleaves.keys():
                 for i, fill in enumerate(fill_iterator(k.count(0))):
-                    fill_dims: DimensionalReference = get_fill(fill)
-                    j = -1
-                    fillin: list[Any] = [fill_dims[(j := j + 1)] if k[i]==0 else -k[i] for i in range(var_count)]
-
                     if cleaver.cleaves[k][i]:
+                        fill_dims: DimensionalReference = get_fill(fill)
+                        j = -1
+                        fillin: list[Any] = [fill_dims[(j := j + 1)] if k[i]==0 else -k[i] for i in range(var_count)]
                         vamp: str = self.vampire(fillin)
 
                         if VERIFY_ALL_FORMULAS:
                             assert not any(cm(vamp) for cm in model_table.counter_models)
-                            assert model_table.target_model(vamp), vamp+"\n"+str(i)+"\n"+str(fillin)
+                            try:
+                                assert model_table.target_model(vamp), vamp+"\n"+str(i)+"\n"+str(fillin)
+                            except:
+                                print(self.calculate(model_table.target_model, full_fill(cleaver.full_size)))
+                                print(np.vstack(np.logical_not(self.calculate(model_table.target_model, full_fill(cleaver.full_size))).nonzero()))
+                                print('\n'.join(str(k)+":"+str(v) for k, v in cleaver.cleaves.items()))
+                                raise AssertionError
 
                         vampire_result: bool | Model = vampire_wrapper(vamp)
                         if vampire_result==False:
@@ -849,6 +856,9 @@ class TreeForm:
                             if VERIFY_ALL_FORMULAS:
                                 assert not cleaver.cleaves[k][i]
                     elif VERIFY_ALL_FORMULAS:
+                        fill_dims: DimensionalReference = get_fill(fill)
+                        j = -1
+                        fillin: list[Any] = [fill_dims[(j := j + 1)] if k[i]==0 else -k[i] for i in range(var_count)]
                         vamp: str = self.vampire(fillin)
                         assert not model_table.target_model(vamp) or any(cm(vamp) for cm in model_table.counter_models), vamp+"\n"+str(i)+"\n"+str(fillin)
 
@@ -931,7 +941,7 @@ class TreeForm:
         return unsolved_count, total_processed
     
     @functools.cache
-    def _formula_count_helper(self, size: int) -> tuple[tuple[tuple[OperationSpec, ...], int], ...]:
+    def _formula_count_helper(self, size: int) -> tuple[tuple[tuple[int, ...], int], ...]:
         """Helper function for determining the number of possible formulas.
         Returns a mapping from operations used to formula counts, 
         must be in the form of a tuple rather than a dict for caching.
@@ -947,9 +957,9 @@ class TreeForm:
             Mapping from operations used to formula counts
         """        
         if size==1:
-            return (((), 1),)
-        counts: dict[tuple[OperationSpec, ...], int] = {}
-        for op in self.OPERATION_REFERENCE:
+            return ((tuple([0 for _ in self.OPERATION_REFERENCE])+(1,), 1),)
+        counts: dict[tuple[int, ...], int] = {}
+        for i, op in enumerate(self.OPERATION_REFERENCE):
             for comb in self._node_size_combos(op.arity, size - 1):
                 valid = True
                 for s in comb:
@@ -957,13 +967,12 @@ class TreeForm:
                         valid = False
                         break
                 if valid:
-                    comb_dicts: list[dict[tuple[OperationSpec, ...], int]] = [dict(self._formula_count_helper(s)) for s in comb]
+                    comb_dicts: list[dict[tuple[int, ...], int]] = [dict(self._formula_count_helper(s)) for s in comb]
                     for comb_set in itertools.product(*[list(d.items()) for d in comb_dicts]):
-                        new_set = set(itertools.chain.from_iterable(set(s) for s, c in comb_set))
-                        new_set.add(op)
-                        new_s: tuple[OperationSpec, ...] = tuple([op for op in self.OPERATION_REFERENCE if op in new_set])
+                        new_s_temp = np.sum([np.array(s, dtype=np.int8) for s, c in comb_set], axis=0)
+                        new_s_temp[i] += 1
+                        new_s: tuple[int, ...] = tuple(new_s_temp)
                         new_c: int = int(np.prod(np.array([c for s, c in comb_set])))
-
                         if new_s in counts.keys():
                             counts[new_s] += new_c
                         else:
@@ -991,16 +1000,18 @@ class TreeForm:
         RuntimeError
             No nondegenerate formulas
         """         
-        res: tuple[tuple[tuple[OperationSpec, ...], int], ...] = self._formula_count_helper(size)
-        if not allow_degenerate:
-            for s, c in res:
-                if s == self.OPERATION_REFERENCE:
-                    return c
-                
-            print(res)
-            raise RuntimeError
-        else:
-            return sum([c for s, c in res])
+        res: dict[tuple[int, ...], int] = dict(self._formula_count_helper(size))
+        total = 0
+        for s, c in res.items():
+            if not allow_degenerate and (np.array(s)==0).any():
+                pass
+            else:
+                if len(self.CONSTANT_REFERENCE)==0:
+                    total += c * bells(s[-1])
+                else:
+                    total += c * (degenerate_constant_combinations if allow_degenerate else nondegenerate_constant_combinations)(s[-1])
+                    
+        return total
 
     def verify_formulas(self, size: int) -> None:
         """Verifies the formulas generated by a tree.
@@ -1028,17 +1039,17 @@ class TreeForm:
         default_degeneracy = np.zeros(len(self.OPERATION_REFERENCE)+1, dtype=np.int8)
         count = 0
         expressions: set[str] = set()
-        for state in self.new_node(size, default_degeneracy).get_iterator(default_degeneracy):
-            count += 1
-            vamp = self.PREFIX.vampire_symbol+"("+state.vampire()+")"
+        for state in self.TopNode(self, size, default_degeneracy).get_iterator(default_degeneracy):
+            count += sum([c.shape[0] for c in CleavingMatrix(state.var_count, len(self.CONSTANT_REFERENCE)).cleaves.values()])
+            vamp = state.vampire()
             expressions.add(vamp)
             try:
                 model.compile_expression(vamp)
             except:
                 raise AssertionError("Unverifiable form: "+vamp)
-            print(vamp)#str(count)+":"+
+            #print(vamp)#str(count)+":"+
         
-        assert count == target_count, "Counts: "+str(count)+" "+str(target_count)
+        assert count == target_count and count == len(expressions), "Counts: "+str(count)+" "+str(target_count)+" "+str(len(expressions))
 
 
 

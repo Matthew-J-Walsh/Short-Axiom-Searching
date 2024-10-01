@@ -12,7 +12,7 @@ def FullC0() -> None:
 
     #wipe_counter_models(counter_model_folder)
 
-    counter_modeling_formula_sets: list[list[str]] = [["t(i(i(i(i(i(X,Y),i(Z,o)),U),V),i(i(V,X),i(Z,X))))"]]
+    counter_modeling_formula_sets: list[list[str]] = [["t(i(i(i(i(i(X,Y),i(Z,f)),U),V),i(i(V,X),i(Z,X))))"]]
 
     C0 = TreeForm(C_OPERATIONS[1:]+C0_CONSTANTS, C_OPERATIONS[0], 15)
 

@@ -77,7 +77,7 @@ CLASSICAL_NEGATION = OperationSpec("N", "n", 1, numpy_read_only_array([1, 0]))
 """Definition of classical negation function"""
 CLASSICAL_TRUE = ConstantSpec("T", "o", 1, True)
 """Definition of classical True constant"""
-CLASSICAL_FALSE = ConstantSpec("F", "o", 0, False)
+CLASSICAL_FALSE = ConstantSpec("F", "f", 0, False)
 """Definition of classical False constant"""
 
 CN_OPERATIONS: tuple[OperationSpec, ...] = (CLASSICAL_TRUTH, CLASSICAL_IMPLICATION, CLASSICAL_NEGATION)
@@ -97,7 +97,7 @@ C0_SPEC: ModelSpec = ModelSpec(C_OPERATIONS, C0_CONSTANTS)
 C1_SPEC: ModelSpec = ModelSpec(C_OPERATIONS, C1_CONSTANTS)
 """Spec for Implication logic with True Constant"""
 
-VERIFY_ALL_FORMULAS: bool = False
+VERIFY_ALL_FORMULAS: bool = True
 """Should all formulas be checked (takes a very long time)"""
 
 

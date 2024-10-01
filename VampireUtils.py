@@ -32,7 +32,7 @@ class VampireWrapper:
         self.model_spec = model_spec
 
         baseline_args = {
-            "-t": "240",
+            "-t": "60",
             "-sa": "fmb",
         }
         if optional_args:
