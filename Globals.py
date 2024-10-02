@@ -97,7 +97,7 @@ C0_SPEC: ModelSpec = ModelSpec(C_OPERATIONS, C0_CONSTANTS)
 C1_SPEC: ModelSpec = ModelSpec(C_OPERATIONS, C1_CONSTANTS)
 """Spec for Implication logic with True Constant"""
 
-VERIFY_ALL_FORMULAS: bool = True
+VERIFY_ALL_FORMULAS: bool = False
 """Should all formulas be checked (takes a very long time)"""
 
 

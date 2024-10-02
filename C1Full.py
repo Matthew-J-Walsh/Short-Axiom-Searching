@@ -5,18 +5,18 @@ from VampireUtils import *
 
 import time
 
-def FullC0() -> None:
+def FullC1() -> None:
     vampire_executable_file_path = os.path.join("theorem_provers", "vampire")
-    unsolved_folder = "C0Remaining"
-    counter_model_folder = "C0CounterModels"
+    unsolved_folder = "C1Remaining"
+    counter_model_folder = "C1CounterModels"
 
     #wipe_counter_models(counter_model_folder)
 
     counter_modeling_formula_sets: list[list[str]] = [["t(i(i(i(i(i(X,Y),i(Z,f)),U),V),i(i(V,X),i(Z,X))))"]]
 
-    C0 = TreeForm(C_OPERATIONS[1:]+C0_CONSTANTS, C_OPERATIONS[0], 15)
+    C1 = TreeForm(C_OPERATIONS[1:]+C1_CONSTANTS, C_OPERATIONS[0], 15)
 
-    Models = ModelTable(C0_SPEC, counter_model_folder=counter_model_folder)
+    Models = ModelTable(C1_SPEC, counter_model_folder=counter_model_folder)
     Models.verify_counter_model_sets(counter_modeling_formula_sets)
 
     if not os.path.exists(unsolved_folder):
@@ -24,10 +24,10 @@ def FullC0() -> None:
 
     vampire_wrapper: VampireWrapper = VampireWrapper(vampire_executable_file_path, counter_modeling_formula_sets, counter_model_folder, Models.spec, verify_models=True)
 
-    for i in [11, 13]:
+    for i in [7, 9, 11, 13]:
         print("Starting length: "+str(i))
         start_time = time.time()
-        unsolved_count, processed_count = C0.process_tree(i, Models, vampire_wrapper, os.path.join(unsolved_folder, "C0"+str(i)+"Rem.txt"))
+        unsolved_count, processed_count = C1.process_tree(i, Models, vampire_wrapper, os.path.join(unsolved_folder, "C1"+str(i)+"Rem.txt"))
         
         print("Processed "+str(processed_count)+" formulas, Was unable to solve: "+str(unsolved_count))
     
@@ -38,5 +38,5 @@ def FullC0() -> None:
 
 
 if __name__ == "__main__":
-    FullC0()
+    FullC1()
 

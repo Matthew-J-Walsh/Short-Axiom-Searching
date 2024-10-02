@@ -747,7 +747,7 @@ class TreeForm:
             if fillin is None:
                 return self._vampire_cache
             else:
-                assert len(fillin) == self._vampire_cache.count("_")
+                assert len(fillin) == self._vampire_cache.count("_"), str(self._vampire_cache)+", "+str(fillin)
                 i = 0
                 temp: list[Any] = []
                 for c in self._vampire_cache:
@@ -881,23 +881,20 @@ class TreeForm:
             if model.order > self.tree._RESONABLE_MAXIMUM_FULL_MODELING_SIZE:
                 for k in cleaver.cleaves.keys():
                     var_count = k.count(0)
-                    cleave: CleavingArray = CleavingMatrix.base_cleaver(var_count) if cleave_direction == "Downward" else np.logical_not(CleavingMatrix.base_cleaver(var_count))
                     fill_iter: Iterable[tuple[int, FillPointer]] = enumerate(fill_iterator(var_count)) if cleave_direction == "Downward" else reversed(list(enumerate(fill_iterator(var_count))))
                     for i, fill in fill_iter:
                         assert fill.point==i #TODO
                         assert fill.size==var_count
                         fill_dims: DimensionalReference = get_fill(fill)
                         j = -1
-                        fillin: list[Any] = [fill_dims[(j := j + 1)] if k[i]==0 else -k[i] for i in range(var_count)]
-                        if (cleave[i] if cleave_direction == "Downward" else not cleave[i]) and cleaver.cleaves[k][i]:
+                        fillin: list[Any] = [fill_dims[(j := j + 1)] if k[i]==0 else -k[i] for i in range(self.var_count)]
+                        if cleaver.cleaves[k][i]:
                             vamp: str = self.vampire(fillin)
-                            if model(vamp):
-                                if cleave_direction == "Downward":
-                                    cleave *= fill_downward_cleave(fill).astype(np.bool_)
-                                else: #cleave_direction == "Upward":
-                                    cleave = np.logical_or(cleave, fill_downward_cleave(fill).astype(np.bool_))
-
-                    cleaver.cleaves[k] *= cleave
+                            model_eval = model(vamp)
+                            if not model_eval and cleave_direction == "Downward":
+                                cleaver.cleaves[k] *= fill_downward_cleave(fill).astype(np.bool_)
+                            elif model_eval and cleave_direction == "Upward":
+                                cleaver.cleaves[k] *= fill_upward_cleave(fill).astype(np.bool_)
 
             else:
                 full_model_evaluation = self.calculate(model, full_fill(cleaver.full_size))#model.apply_function(self.tree.PREFIX, self.calculate(model, full_fill(cleaver.full_size)))
@@ -1042,18 +1039,18 @@ class TreeForm:
         for state in self.TopNode(self, size, default_degeneracy).get_iterator(default_degeneracy):
             cleaver = CleavingMatrix(state.var_count, len(self.CONSTANT_REFERENCE))
             count += sum([c.shape[0] for c in cleaver.cleaves.values()])
-            vamp = state.vampire()
-            try:
-                model.compile_expression(vamp)
-            except:
-                raise AssertionError("Unverifiable form: "+vamp)
             for k in cleaver.cleaves.keys():
                 var_count = k.count(0)
                 for i, fill in enumerate(fill_iterator(var_count)):
                     fill_dims: DimensionalReference = get_fill(fill)
                     j = -1
                     fillin: list[Any] = [fill_dims[(j := j + 1)] if k[i]==0 else -k[i] for i in range(state.var_count)]
-                    expressions.add(state.vampire(fillin))
+                    vamp = state.vampire(fillin)
+                    expressions.add(vamp)
+                    try:
+                        model.compile_expression(vamp)
+                    except:
+                        raise AssertionError("Unverifiable form: "+vamp)
             #print(vamp)#str(count)+":"+
         
         assert count == target_count and count == len(expressions), "Counts: "+str(count)+" "+str(target_count)+" "+str(len(expressions))

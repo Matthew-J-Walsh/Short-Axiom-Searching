@@ -350,12 +350,11 @@ def fill_downward_cleave(fill: FillPointer) -> np.ndarray:
     assert fill.point < _fill_table_subsumptive_table.shape[0], str(fill.point) + ", " + str(_fill_table_subsumptive_table.shape)
     return _fill_table_subsumptive_table[fill.point, :bells(fill.size)]
 
-def fill_upward_cleave(i: int, size: int) -> np.ndarray:
+def fill_upward_cleave(fill: FillPointer) -> np.ndarray:
     #Cleave from tautological discovery at index i
     #Returns 0 on cleaved elements
-    raise RuntimeError("Not sure why you would use this")
-    assert i < _fill_table_subsumptive_table.shape[1]
-    return _fill_table_subsumptive_table[:bells(size), i]
+    assert fill.point < _fill_table_subsumptive_table.shape[1]
+    return _fill_table_subsumptive_table[:bells(fill.size), fill.point]
 
 @functools.cache
 def _point_to_fill_cached(fill: tuple[int, ...]) -> int:
