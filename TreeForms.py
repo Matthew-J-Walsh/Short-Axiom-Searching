@@ -5,6 +5,7 @@ from MathUtilities import degenerate_constant_combinations, nondegenerate_consta
 from ModelTools import *
 from VampireUtils import *
 from FillTools import *
+from ProgressUtils import *
 
 CountArray = np.ndarray[Any, np.dtype[np.int8]]
 
@@ -775,7 +776,7 @@ class TreeForm:
                 yield self
         
         #@profile # type: ignore
-        def process(self, model_table: ModelTable, vampire_wrapper: VampireWrapper, remaining_file: TextIOWrapper) -> tuple[int, int]:
+        def process(self, model_table: ModelTable, vampire_wrapper: VampireWrapper, remaining_file: TextIOWrapper, progress_tracker: ProgressTracker) -> tuple[int, int]:
             """Fully processes this Node in its current state (without iterating it), creating new countermodels using vampire as needed.
             Indeterminate expressions will be placed into the remaining file
 
@@ -787,6 +788,8 @@ class TreeForm:
                 Vampire function, returns False if no model was found, otherwise returns the model
             remaining_file : str
                 File to place the indeterminate expressions (Tautological but Un-countermodeled) into
+            progress_tracker : ProgressTracker
+                Tracker for progress through the calculations
 
             Returns
             -------
@@ -794,39 +797,18 @@ class TreeForm:
                 How many unsolved expressions were added to the remaining file
                 How many expressions were processed
             """            
-
+            progress_tracker.process = "Downward Cleaving"
+            progress_tracker.formula = self.vampire()
             var_count: int = self.var_count
             cleaver = CleavingMatrix(var_count, len(self.tree.CONSTANT_REFERENCE))
 
             self._process_cleaver_helper(cleaver, model_table.target_model, "Downward")
-            
+
+            progress_tracker.process = "Upward Cleaving"
             for cm in model_table.counter_models:
                 if cleaver.empty:
                     break
                 self._process_cleaver_helper(cleaver, cm, "Upward")
-
-            #small_counter_models, big_counter_models = model_table.counter_models_size_split(self.tree._RESONABLE_MAXIMUM_FULL_MODELING_SIZE)
-            #for cm in small_counter_models:
-            #    if cleaver.empty:
-            #        break
-            #    self._process_cleaver_helper(cleaver, cm, "Upward")
-            #
-            #if not cleaver.empty:
-            #    for k in cleaver.cleaves.keys(): 
-            #        var_count = k.count(0)
-            #        cleave = CleavingMatrix.base_cleaver(var_count)
-            #        fill_iter = reversed(list(enumerate(fill_iterator(var_count))))
-            #        for i, fill in fill_iter:
-            #            if cleaver.constant_binding_empty(k):
-            #                break
-            #            if cleaver.cleaves[k][i]:
-            #                fill_dims: DimensionalReference = get_fill(fill)
-            #                j = -1
-            #                fillin: list[Any] = [fill_dims[(j := j + 1)] if k[i]==0 else self.tree.CONSTANT_REFERENCE[- k[i] - 1].vampire_symbol for i in range(cleaver.full_size)]
-            #                vamp: str = self.vampire(fillin)
-            #                for cm in big_counter_models:
-            #                    if cm("t("+vamp+")"):
-            #                        cleave *= fill_downward_cleave(i, var_count).astype(np.bool_)
 
             for k in cleaver.cleaves.keys():
                 for i, fill in enumerate(fill_iterator(k.count(0))):
@@ -846,6 +828,8 @@ class TreeForm:
                                 print('\n'.join(str(k)+":"+str(v) for k, v in cleaver.cleaves.items()))
                                 raise AssertionError
 
+                        progress_tracker.process = "Countermodeling with Vampire"
+                        progress_tracker.formula = vamp
                         vampire_result: bool | Model = vampire_wrapper(vamp)
                         if vampire_result==False:
                             remaining_file.write(self.vampire(fillin)+"\n")
@@ -862,6 +846,8 @@ class TreeForm:
                         vamp: str = self.vampire(fillin)
                         assert not model_table.target_model(vamp) or any(cm(vamp) for cm in model_table.counter_models), vamp+"\n"+str(i)+"\n"+str(fillin)
 
+            progress_tracker.process = "Wrapping up"
+            progress_tracker.formula = self.vampire()
             return sum(c.sum() for c in cleaver.cleaves.values()), sum(c.shape[0] for c in cleaver.cleaves.values())
 
         #@profile # type: ignore
@@ -903,7 +889,8 @@ class TreeForm:
                 cleaver *= fill_result_disassembly_application(full_model_evaluation, [model.constant_definitions[cons] for cons in self.tree.CONSTANT_REFERENCE], cleave_direction)
     
 
-    def process_tree(self, size: int, model_table: ModelTable, vampire_wrapper: VampireWrapper, remaining_filename: str, skip: int = 0) -> tuple[int, int]:
+    def process_tree(self, size: int, model_table: ModelTable, vampire_wrapper: VampireWrapper, remaining_filename: str, 
+                     progress_tracker: ProgressTracker, skip: int | str = 0) -> tuple[int, int]:
         """Processes this entire Tree species at a particular size into a file
 
         Parameters
@@ -916,8 +903,12 @@ class TreeForm:
             Vampire function, returns False if no model was found, otherwise returns the model
         remaining_filename : str
             Filename to place the indeterminate expressions (Tautological but Un-countermodeled) into
-        skip : int
+        progress_tracker : ProgressTracker
+            Tool to track progress through the computation
+        skip : int | str
             Number of states to skip at the start. Useful for restarting after a keyboard iterrupt. Default 0
+            If str, interperted as file, and will load the first line of the file (if it doesn't exist it creates the file with a first line 0)
+            as the skip count and continuously update it
 
         Returns
         -------
@@ -925,25 +916,54 @@ class TreeForm:
             How many unsolved expressions were added to the remaining file
             How many expressions were processed
         """        
-        unsolved_count = 0
-        total_processed = 0
-        default_degeneracy = np.zeros(len(self.OPERATION_REFERENCE)+1, dtype=np.int8)
+        default_degeneracy: CountArray = np.zeros(len(self.OPERATION_REFERENCE)+1, dtype=np.int8)
 
         i = 0
+        if isinstance(skip, str):
+            skip_path = Path(skip)
+            if not skip_path.parent.exists():
+                skip_path.parent.mkdir(parents=True, exist_ok=True)
+            if not skip_path.exists():
+                with open(skip_path, 'w') as skip_file:
+                    skip_file.write("0")
+            with open(skip_path, 'r+') as skip_file:
+                unsolved_count, total_processed = self._process_tree_internal_loop(size, model_table, vampire_wrapper, remaining_filename, default_degeneracy, progress_tracker, skip_file)
+        else:
+            unsolved_count, total_processed = self._process_tree_internal_loop(size, model_table, vampire_wrapper, remaining_filename, default_degeneracy, progress_tracker, skip)
+        
+        return unsolved_count, total_processed
+
+    def _process_tree_internal_loop(self, size: int, model_table: ModelTable, vampire_wrapper: VampireWrapper, remaining_filename: str, default_degeneracy: CountArray, progress_tracker: ProgressTracker, skip_value: TextIOWrapper | int = 0) -> tuple[int, int]:
+        """Internal helper for process_tree, see above. Forced due to "open" syntax and crash safety.
+        """
+        unsolved_count: int = 0
+        total_processed: int = 0
+        i: int = 0
+        if isinstance(skip_value, TextIOWrapper):
+            skip: int = int(skip_value.read().strip())
+        else:
+            skip: int = skip_value
         try:
             with open(remaining_filename, 'a') as remaining_file:
                 for state in self.TopNode(self, size, default_degeneracy).get_iterator(default_degeneracy):
                     if i >= skip:
-                        new_unsolved, new_processed = state.process(model_table, vampire_wrapper, remaining_file)
+                        new_unsolved, new_processed = state.process(model_table, vampire_wrapper, remaining_file, progress_tracker)
                         unsolved_count += new_unsolved
                         total_processed += new_processed
                     i += 1
+                    skip = i
+                    progress_tracker.progress = i
+                    if isinstance(skip_value, TextIOWrapper):
+                        skip_value.seek(0)
+                        skip_value.write(str(skip))
+                        skip_value.flush()
+                        skip_value.truncate()
         except KeyboardInterrupt:
             print("Interrupted after completing "+str(i)+" iterations.")
         except Exception as e:
             print("Exception after completing "+str(i)+" iterations.")
             raise e
-        
+
         return unsolved_count, total_processed
     
     @functools.cache
@@ -986,6 +1006,36 @@ class TreeForm:
         
         return tuple(counts.items())
     
+    def form_count(self, size: int, allow_degenerate: bool = False) -> int:
+        """Calculates the number of formulas there should be of a particular size, not including different variable setups
+
+        Parameters
+        ----------
+        size : int
+            Formula size target
+        allow_degenerate : bool, optional
+            If degenerate formulas (not containing all lexographical elements) should be counted, by default False
+
+        Returns
+        -------
+        int
+            Total Count
+
+        Raises
+        ------
+        RuntimeError
+            No nondegenerate formulas
+        """         
+        res: dict[tuple[int, ...], int] = dict(self._formula_count_helper(size))
+        total = 0
+        for s, c in res.items():
+            if not allow_degenerate and (np.array(s)==0).any():
+                pass
+            else:
+                total += c
+
+        return total
+
     def formula_count(self, size: int, allow_degenerate: bool = False) -> int:
         """Calculates the number of formulas there should be of a particular size, including different variable setups
 

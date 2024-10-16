@@ -108,6 +108,33 @@ class VampireWrapper:
                 
         return False
     
+    def hammer(self, remaining_file_name: str) -> None:
+        with open(remaining_file_name, 'r') as remaining_file:
+            formulas = remaining_file.readlines()
+
+        print("Starting processing of "+str(len(formulas))+" formulas individually.")
+        
+        continuing_remainders: list[str] = []
+        held_models: list[Model] = []
+        for formula in formulas:
+            solved = False
+            for hm in held_models:
+                if hm(formula):
+                    solved = True
+                    break
+            if not solved:
+                result = self(formula)
+                if result==False:
+                    continuing_remainders.append(formula)
+                else:
+                    assert isinstance(result, Model)
+                    held_models.append(result)
+        
+        with open(remaining_file_name, 'r') as remaining_file:
+            remaining_file.writelines(continuing_remainders)
+
+        print(str(len(formulas))+" formulas remaing after processing.")
+    
     @staticmethod
     def _revariablize_count_model_set(counter_model_set: list[str]) -> list[str]:
         raise NotImplementedError

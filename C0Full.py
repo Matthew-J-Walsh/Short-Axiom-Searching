@@ -9,6 +9,7 @@ def FullC0() -> None:
     vampire_executable_file_path = os.path.join("theorem_provers", "vampire")
     unsolved_folder = "C0Remaining"
     counter_model_folder = "C0CounterModels"
+    save_file_base = os.path.join("partial_run_saves", "C0")
 
     #wipe_counter_models(counter_model_folder)
 
@@ -27,14 +28,15 @@ def FullC0() -> None:
     for i in [15, 17]:
         print("Starting length: "+str(i))
         start_time = time.time()
-        unsolved_count, processed_count = C0.process_tree(i, Models, vampire_wrapper, os.path.join(unsolved_folder, "C0"+str(i)+"Rem.txt"))
+        progress_tracker = ProgressTracker(C0.form_count(i))
+        save_file = save_file_base+str(i)+".txt"
+        unsolved_count, processed_count = C0.process_tree(i, Models, vampire_wrapper, os.path.join(unsolved_folder, "C0"+str(i)+"Rem.txt"), progress_tracker, save_file)
         
         print("Processed "+str(processed_count)+" formulas, Was unable to solve: "+str(unsolved_count))
     
         print("Execution time: "+str(time.time() - start_time))
 
     Models.verify_counter_model_sets(counter_modeling_formula_sets)
-
 
 
 if __name__ == "__main__":
