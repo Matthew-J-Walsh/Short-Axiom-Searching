@@ -24,7 +24,7 @@ def FullC0() -> None:
 
     vampire_wrapper: VampireWrapper = VampireWrapper(vampire_executable_file_path, counter_modeling_formula_sets, counter_model_folder, Models.spec, verify_models=True)
 
-    for i in [11, 13]:
+    for i in [15, 17]:
         print("Starting length: "+str(i))
         start_time = time.time()
         unsolved_count, processed_count = C0.process_tree(i, Models, vampire_wrapper, os.path.join(unsolved_folder, "C0"+str(i)+"Rem.txt"))

@@ -79,6 +79,12 @@ CLASSICAL_TRUE = ConstantSpec("T", "o", 1, True)
 """Definition of classical True constant"""
 CLASSICAL_FALSE = ConstantSpec("F", "f", 0, False)
 """Definition of classical False constant"""
+LUKASIEWICZ_TRUTH = OperationSpec("T", "t", 1, numpy_read_only_array([False, False, True], dtype=np.bool_))
+"""Definition of truth in a Lukasiewicz 3-valued logic system"""
+LUKASIEWICZ_IMPLICATION = OperationSpec("C", "i", 2, numpy_read_only_array([[2, 2, 2], [1, 2, 2], [0, 1, 2]]))
+"""Definition of implication in a Lukasiewicz 3-valued logic system"""
+LUKASIEWICZ_NEGATION = OperationSpec("N", "n", 1, numpy_read_only_array([2, 1, 0]))
+"""Definition of negation in a Lukasiewicz 3-valued logic system"""
 
 CN_OPERATIONS: tuple[OperationSpec, ...] = (CLASSICAL_TRUTH, CLASSICAL_IMPLICATION, CLASSICAL_NEGATION)
 """Operations for Propositional logic"""
@@ -96,6 +102,13 @@ C0_SPEC: ModelSpec = ModelSpec(C_OPERATIONS, C0_CONSTANTS)
 """Spec for Implication logic with False Constant"""
 C1_SPEC: ModelSpec = ModelSpec(C_OPERATIONS, C1_CONSTANTS)
 """Spec for Implication logic with True Constant"""
+LUKASIEWICZ_3VI_OPERATIONS: tuple[OperationSpec, OperationSpec] = (LUKASIEWICZ_TRUTH, LUKASIEWICZ_IMPLICATION)
+"""Operations for Lukasiewicz 3-valued logic system implicational fragment"""
+LUKASIEWICZ_3VI_CONSTANTS: tuple[ConstantSpec, ...] = ()
+"""Constants for Lukasiewicz 3-valued logic system implicational fragment"""
+LUKASIEWICZ_3VI_SPEC: ModelSpec = ModelSpec(LUKASIEWICZ_3VI_OPERATIONS, LUKASIEWICZ_3VI_CONSTANTS)
+"""Spec for Lukasiewicz 3-valued logic system implicational fragment"""
+
 
 VERIFY_ALL_FORMULAS: bool = False
 """Should all formulas be checked (takes a very long time)"""

@@ -81,6 +81,28 @@ def nondegenerate_constant_combinations(n: int) -> int:
         Number of non-degenerate constant and variable combinations
     """    
     return sum(binomial(n, i) * bells(i) for i in range(1, n))
+
+@functools.cache
+def higher_order_bell(i: int, n: int) -> int:
+    """The ith (n-1)-Bell number (for n>2), for (n=1) the bell numbers, for (n=2) the bell numbers offset by 1.
+    higher_order_bell(i, 1)==bells(i)
+
+    Parameters
+    ----------
+    i : int
+        Base length
+    n : int
+        Leftmost maximal height
+
+    Returns
+    -------
+    int
+        Triangle count?
+    """    
+    if i==0:
+        return 1
+    else:
+        return (n - 1) * higher_order_bell(i - 1, n) + higher_order_bell(i - 1, n + 1)
     
     
     

@@ -903,7 +903,7 @@ class TreeForm:
                 cleaver *= fill_result_disassembly_application(full_model_evaluation, [model.constant_definitions[cons] for cons in self.tree.CONSTANT_REFERENCE], cleave_direction)
     
 
-    def process_tree(self, size: int, model_table: ModelTable, vampire_wrapper: VampireWrapper, remaining_filename: str) -> tuple[int, int]:
+    def process_tree(self, size: int, model_table: ModelTable, vampire_wrapper: VampireWrapper, remaining_filename: str, skip: int = 0) -> tuple[int, int]:
         """Processes this entire Tree species at a particular size into a file
 
         Parameters
@@ -916,6 +916,8 @@ class TreeForm:
             Vampire function, returns False if no model was found, otherwise returns the model
         remaining_filename : str
             Filename to place the indeterminate expressions (Tautological but Un-countermodeled) into
+        skip : int
+            Number of states to skip at the start. Useful for restarting after a keyboard iterrupt. Default 0
 
         Returns
         -------
@@ -928,12 +930,19 @@ class TreeForm:
         default_degeneracy = np.zeros(len(self.OPERATION_REFERENCE)+1, dtype=np.int8)
 
         i = 0
-        with open(remaining_filename, 'w') as remaining_file:
-            for state in self.TopNode(self, size, default_degeneracy).get_iterator(default_degeneracy):
-                i += 1
-                new_unsolved, new_processed = state.process(model_table, vampire_wrapper, remaining_file)
-                unsolved_count += new_unsolved
-                total_processed += new_processed
+        try:
+            with open(remaining_filename, 'a') as remaining_file:
+                for state in self.TopNode(self, size, default_degeneracy).get_iterator(default_degeneracy):
+                    if i >= skip:
+                        new_unsolved, new_processed = state.process(model_table, vampire_wrapper, remaining_file)
+                        unsolved_count += new_unsolved
+                        total_processed += new_processed
+                    i += 1
+        except KeyboardInterrupt:
+            print("Interrupted after completing "+str(i)+" iterations.")
+        except Exception as e:
+            print("Exception after completing "+str(i)+" iterations.")
+            raise e
         
         return unsolved_count, total_processed
     

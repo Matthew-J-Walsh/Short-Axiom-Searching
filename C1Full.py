@@ -12,7 +12,7 @@ def FullC1() -> None:
 
     #wipe_counter_models(counter_model_folder)
 
-    counter_modeling_formula_sets: list[list[str]] = [["t(i(i(i(i(i(X,Y),i(Z,f)),U),V),i(i(V,X),i(Z,X))))"]]
+    counter_modeling_formula_sets: list[list[str]] = [["t(i(i(i(X,Y),i(o,Z)),i(U,i(i(Z,X),i(V,i(W,X))))))"]]
 
     C1 = TreeForm(C_OPERATIONS[1:]+C1_CONSTANTS, C_OPERATIONS[0], 15)
 
@@ -24,7 +24,7 @@ def FullC1() -> None:
 
     vampire_wrapper: VampireWrapper = VampireWrapper(vampire_executable_file_path, counter_modeling_formula_sets, counter_model_folder, Models.spec, verify_models=True)
 
-    for i in [7, 9, 11, 13]:
+    for i in [15, 17]:
         print("Starting length: "+str(i))
         start_time = time.time()
         unsolved_count, processed_count = C1.process_tree(i, Models, vampire_wrapper, os.path.join(unsolved_folder, "C1"+str(i)+"Rem.txt"))

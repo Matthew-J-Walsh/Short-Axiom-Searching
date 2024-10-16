@@ -1,3 +1,4 @@
+from types import NotImplementedType
 from Globals import *
 from ModelTools import *
 
@@ -32,8 +33,10 @@ class VampireWrapper:
         self.model_spec = model_spec
 
         baseline_args = {
-            "-t": "60",
-            "-sa": "fmb",
+            "--time_limit": "60",
+            "--saturation_algorithm": "fmb",
+            "--memory_limit": "4096",
+            "--cores": "1",
         }
         if optional_args:
             full_args: dict[str, str] = {**baseline_args, **optional_args}
@@ -75,7 +78,7 @@ class VampireWrapper:
         contents += self._vampire_expression_to_fof_line(vampire_form, "cand", "axiom")
         contents += ''.join(self._vampire_expression_to_fof_line(("" if cons.predicate_orientation else "~")+self.model_spec.operators[0].vampire_symbol+"("+cons.vampire_symbol+")", "constant"+str(i), "axiom") 
                             for i, cons in enumerate(self.model_spec.constants) if not cons.predicate_orientation is None)
-        contents += ''.join(self._vampire_expression_to_fof_line(counter, "counter"+str(i), "conjecture") for i, counter in enumerate(counter_model_set))
+        contents += self._vampire_expression_to_fof_line('&'.join(counter_model_set), "counter", "conjecture")
 
         with open(file_name, 'w') as input_file:
             input_file.write(contents)
@@ -91,9 +94,9 @@ class VampireWrapper:
 
                 if not "Finite Model Found!" in result:
                     #print(result)
-                    #raise ValueError()
-                    os.remove(input_file_name)
-                    #continue
+                    #raise ValueError(result)
+                    #os.remove(input_file_name)
+                    continue
                 else:
                     model: Model = Model(self.model_spec, model_filename = self.save_countermodel(result))
                     if self.verification:
@@ -104,6 +107,10 @@ class VampireWrapper:
                     return model
                 
         return False
+    
+    @staticmethod
+    def _revariablize_count_model_set(counter_model_set: list[str]) -> list[str]:
+        raise NotImplementedError
 
     def wipe_counter_models(self) -> None:
         if os.path.exists(self.counter_model_folder) and os.path.isdir(self.counter_model_folder):

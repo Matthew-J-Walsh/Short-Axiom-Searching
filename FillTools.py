@@ -4,7 +4,7 @@ from typing import Any
 
 from Globals import *
 
-from MathUtilities import bells
+from MathUtilities import *
 
 #Fill = tuple[int, int]
 class FillPointer(NamedTuple):
@@ -191,6 +191,137 @@ def _generate_subsumptive_table_dumb(size: int, arr: np.ndarray) -> np.ndarray:
     
     return subsumptive_table
 
+@functools.cache
+def _point_to_fill_cached(fill: tuple[int, ...]) -> int:
+    """Takes an properly ordered fill and returns the associated pointer
+
+    Parameters
+    ----------
+    fill : tuple[int, ...]
+        Fill
+
+    Returns
+    -------
+    int
+        Index of the Fill
+    """    
+    accumulator = 0
+    maximum_value = 0
+    for forward_i, val in enumerate(fill):
+        reverse_i = len(fill) - forward_i - 1
+        accumulator += val * higher_order_bell(reverse_i, maximum_value + 1)
+        maximum_value = max(maximum_value, val + 1)
+
+    return accumulator
+
+@functools.cache
+def _point_to_fill_cached_old(fill: tuple[int, ...]) -> int:
+    """Takes an properly ordered fill and returns the associated pointer
+
+    Parameters
+    ----------
+    fill : tuple[int, ...]
+        Fill
+
+    Returns
+    -------
+    int
+        Index of the Fill
+    """    
+    raise DeprecationWarning
+    point_arr = np.array(fill)
+    for i in range(bells(point_arr.shape[0])):
+        if (_fill_table_fills[-point_arr.shape[0]:, i] == point_arr).all():
+            return i
+    raise RuntimeError("Unabled find row for fill "+str(fill)+" possibly not normalized.")
+
+@functools.cache
+def point_to_fill(fill: tuple[int, ...]) -> FillPointer:
+    """Takes an improperly ordered fill, properly orders it, and returns the associated pointer
+
+    Parameters
+    ----------
+    fill : tuple[int, ...]
+        Fill
+
+    Returns
+    -------
+    FillPointer
+        Pointer to the Fill
+    """    
+    size: int = len(fill)
+    first_val: int = fill[0]
+    cut: int = 0
+    while cut + 1 < len(fill) and fill[cut + 1] == first_val:
+        cut += 1
+    fill = fill[cut:]
+
+    fixed_fill: list[int] = []
+    conversion: dict[int, int] = {}
+    next_val = 0
+    for i in range(len(fill)):
+        if not fill[i] in conversion.keys():
+            conversion[fill[i]] = next_val
+            next_val += 1
+        fixed_fill.append(conversion[fill[i]])
+    return FillPointer(_point_to_fill_cached(tuple(fixed_fill)), size)
+
+def _subsumed_points(arr: np.ndarray) -> list[tuple[int, ...]]:
+    """Calculates whats points are subsumed by another point (in ndarray form)
+
+    Parameters
+    ----------
+    arr : np.ndarray
+        Point that should subsume
+
+    Returns
+    -------
+    list[tuple[int, ...]]
+        Points that are subsumed
+    """    
+    points: list[tuple[int, ...]] = []
+    n = arr.copy()
+    for f, t in itertools.permutations(range(arr.max()+1), 2):
+        np.copyto(n, arr)
+        n[n==f] = t
+        #n[n>f] = n[n>f] - 1 #refines it slightly but doesnt fix
+        points.append(tuple(n))
+
+    return points
+
+def _generate_subsumptive_table(size: int, arr: np.ndarray) -> np.ndarray:
+    """Generates a subsumptive table for an array of fills by generating subsumed fills
+
+    Parameters
+    ----------
+    size : int
+        Size of the fills
+    arr : np.ndarray
+        Array holding the fills
+
+    Returns
+    -------
+    np.ndarray
+        Table indicating which fills subsume which other fills
+    """    
+    subsumptive_table = np.zeros((arr.shape[0], arr.shape[0]), dtype=np.bool_)
+
+    for i in range(arr.shape[0]):
+        subsumptive_table[i, i] = True
+        for point in _subsumed_points(arr[i]):
+            j = point_to_fill(point).point
+            subsumptive_table[i, j] = True
+            subsumptive_table[i, :] = np.logical_or(subsumptive_table[i, :], subsumptive_table[j, :])
+
+    subsumptive_table = subsumptive_table.astype(np.int8).T
+
+    #dumb = _generate_subsumptive_table_dumb(size, arr)
+    #print(subsumptive_table)
+    #print(dumb)
+    #assert (subsumptive_table==dumb).all()
+        
+    return subsumptive_table
+
 def _add_with_carry(arr: np.ndarray) -> np.ndarray:
     """Iterative function for fills. Adds 1 with carry. Recursive
     Going left to right fills must be no greater than the max so far + 1, 
@@ -236,13 +367,11 @@ def _initialize_fill_table(size: int) -> None:
             current = _add_with_carry(current.copy())
             fills[i] = current
         
-        #fills = fills + 1
-        subsumptive_table = (1 - _generate_subsumptive_table_dumb(size, fills)).astype(np.bool_) #subtact 1 so that 0s are on cleaved values
         fills = fills.T
         fills.setflags(write=False)
-        subsumptive_table.setflags(write=False)
-        
         _fill_table_fills = fills
+        subsumptive_table = (1 - _generate_subsumptive_table(size, fills.T)).astype(np.bool_) #subtact 1 so that 0s are on cleaved values
+        subsumptive_table.setflags(write=False)
         _fill_table_subsumptive_table = subsumptive_table
 
 def fill_iterator(size: int) -> Iterable[FillPointer]:
@@ -355,57 +484,6 @@ def fill_upward_cleave(fill: FillPointer) -> np.ndarray:
     #Returns 0 on cleaved elements
     assert fill.point < _fill_table_subsumptive_table.shape[1]
     return _fill_table_subsumptive_table[:bells(fill.size), fill.point]
-
-@functools.cache
-def _point_to_fill_cached(fill: tuple[int, ...]) -> int:
-    """Takes an properly ordered fill and returns the associated pointer
-
-    Parameters
-    ----------
-    fill : tuple[int, ...]
-        Fill
-
-    Returns
-    -------
-    int
-        Index of the Fill
-    """    
-    point_arr = np.array(fill)
-    for i in range(bells(point_arr.shape[0])):
-        if (_fill_table_fills[-point_arr.shape[0]:, i] == point_arr).all():
-            return i
-    raise RuntimeError("Unabled find row for fill "+str(fill)+" possibly not normalized.")
-
-@functools.cache
-def point_to_fill(fill: tuple[int, ...]) -> FillPointer:
-    """Takes an improperly ordered fill, properly orders it, and returns the associated pointer
-
-    Parameters
-    ----------
-    fill : tuple[int, ...]
-        Fill
-
-    Returns
-    -------
-    FillPointer
-        Pointer to the Fill
-    """    
-    size: int = len(fill)
-    first_val: int = fill[0]
-    cut: int = 0
-    while cut + 1 < len(fill) and fill[cut + 1] == first_val:
-        cut += 1
-    fill = fill[cut:]
-
-    fixed_fill: list[int] = []
-    conversion: dict[int, int] = {}
-    next_val = 0
-    for i in range(len(fill)):
-        if not fill[i] in conversion.keys():
-            conversion[fill[i]] = next_val
-            next_val += 1
-        fixed_fill.append(conversion[fill[i]])
-    return FillPointer(_point_to_fill_cached(tuple(fixed_fill)), size)
 
 #@profile # type: ignore
 def fill_result_disassembly_application(evaluation: ModelArray, constants: Sequence[int], cleave_direction: Literal["Upward"] | Literal["Downward"]) -> CleavingMatrix:
