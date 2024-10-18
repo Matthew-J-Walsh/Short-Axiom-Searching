@@ -31,7 +31,7 @@ def FullLuk3VI() -> None:
 
     vampire_wrapper: VampireWrapper = VampireWrapper(vampire_executable_file_path, counter_modeling_formula_sets, counter_model_folder, Models.spec, verify_models=True)
 
-    for i in [19]:
+    for i in [17]:
         print("Starting length: "+str(i))
         start_time = time.time()
         progress_tracker = ProgressTracker(Luk3VI.form_count(i))

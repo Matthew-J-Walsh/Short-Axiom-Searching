@@ -1,6 +1,7 @@
 import copy
 from typing import Any, Literal, Union, Sequence, Iterable, Callable, NamedTuple, Protocol
 import numpy as np
+from scipy import sparse as sp
 import scipy
 import scipy.special
 import itertools

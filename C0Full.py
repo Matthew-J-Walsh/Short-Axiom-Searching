@@ -25,7 +25,7 @@ def FullC0() -> None:
 
     vampire_wrapper: VampireWrapper = VampireWrapper(vampire_executable_file_path, counter_modeling_formula_sets, counter_model_folder, Models.spec, verify_models=True)
 
-    for i in [15, 17]:
+    for i in [11]:
         print("Starting length: "+str(i))
         start_time = time.time()
         progress_tracker = ProgressTracker(C0.form_count(i))

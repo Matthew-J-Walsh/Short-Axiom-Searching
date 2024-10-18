@@ -878,9 +878,9 @@ class TreeForm:
                             vamp: str = self.vampire(fillin)
                             model_eval = model(vamp)
                             if not model_eval and cleave_direction == "Downward":
-                                cleaver.cleaves[k] *= fill_downward_cleave(fill).astype(np.bool_)
+                                cleaver.cleaves[k] *= np.logical_not(fill_downward_cleave(fill).toarray().flatten().astype(np.bool_))
                             elif model_eval and cleave_direction == "Upward":
-                                cleaver.cleaves[k] *= fill_upward_cleave(fill).astype(np.bool_)
+                                cleaver.cleaves[k] *= np.logical_not(fill_upward_cleave(fill).toarray().flatten().astype(np.bool_))
 
             else:
                 full_model_evaluation = self.calculate(model, full_fill(cleaver.full_size))#model.apply_function(self.tree.PREFIX, self.calculate(model, full_fill(cleaver.full_size)))
@@ -951,14 +951,14 @@ class TreeForm:
                         unsolved_count += new_unsolved
                         total_processed += new_processed
                     i += 1
-                    skip = i
+                    skip = max(skip, i)
                     progress_tracker.progress = i
                     if isinstance(skip_value, TextIOWrapper):
                         skip_value.seek(0)
                         skip_value.write(str(skip))
                         skip_value.flush()
                         skip_value.truncate()
-        except KeyboardInterrupt:
+        except KeyboardInterrupt as e:
             print("Interrupted after completing "+str(i)+" iterations.")
         except Exception as e:
             print("Exception after completing "+str(i)+" iterations.")
