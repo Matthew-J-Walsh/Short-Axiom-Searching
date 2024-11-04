@@ -15,7 +15,7 @@ def FullCN() -> None:
 
     counter_modeling_formula_sets: list[list[str]] = [["t(i(i(i(i(i(X,Y),i(n(Z),n(U))),Z),V),i(i(V,X),i(U,X))))"]]
 
-    CN = TreeForm(CN_OPERATIONS[1:], CN_OPERATIONS[0], 14)
+    CN = TreeForm(CN_SPEC, 14)
 
     CN.verify_formulas(8)
 
@@ -25,7 +25,7 @@ def FullCN() -> None:
     if not os.path.exists(unsolved_folder):
         os.makedirs(unsolved_folder)
 
-    vampire_wrapper: VampireWrapper = VampireWrapper(vampire_executable_file_path, counter_modeling_formula_sets, counter_model_folder, Models.spec, verify_models=True)
+    vampire_wrapper: TheoremProverWrapper = TheoremProverWrapper(vampire_executable_file_path, counter_modeling_formula_sets, counter_model_folder, Models.spec, verify_models=True)
 
     for i in [11]:
         print("Starting length: "+str(i))

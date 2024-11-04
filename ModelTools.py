@@ -3,6 +3,33 @@ from __future__ import annotations
 from Globals import *
 from FillTools import *
 
+def _get_generated_prefix_value(prefix: PrefixSpec, model: Model) -> np.ndarray:
+    """Generates specific prefixes', with fixed values, default tables that are model dependent.
+    Currently supported: Equality "="
+
+    Parameters
+    ----------
+    prefix : PrefixSpec
+        Prefix operator to make the value of
+    model : Model
+        Model that the value is being made from
+
+    Returns
+    -------
+    np.ndarray
+        Prefix constant value
+
+    Raises
+    ------
+    NotImplementedError
+        No implementation for that prefix
+    """    
+    if prefix.symbol == "=":
+        arr: ModelArray = np.eye(model.order, dtype=np.bool_)
+        arr.setflags(write=False)
+        return arr
+    raise NotImplementedError
+
 class CompiledElement(NamedTuple):
     table: np.ndarray
     inputs: np.ndarray
@@ -129,7 +156,7 @@ def array_dimensional_resizer(target_size: int, current: tuple[int, ...]) -> tup
     return tuple([slice(None) if i in current else np.newaxis for i in range(target_size)])
 
 class VampireOutputTools:
-    """Tools to process a vampire finite models
+    """Tools to process a tptp finite models
     """    
     _variable_regex: re.Pattern = re.compile(r"tff\('declare_\$i(\d+)',type,(\w|'\bfmb_\$i_\d+\b'):\$i\)")
     """Regex to pull out variables"""
@@ -171,7 +198,7 @@ class VampireOutputTools:
 
     @staticmethod
     def functions_arity_verification(result: str, arities: dict[str, int]) -> None:
-        """Verifies the arity of the functions in a vampire output
+        """Verifies the arity of the functions in a tptp output
 
         Parameters
         ----------
@@ -186,7 +213,7 @@ class VampireOutputTools:
     
     @staticmethod
     def function_parse(result: str, function_identifier: str, order: int, arity: int, predicate: bool) -> np.ndarray:
-        """Parses a function out of a vampire output
+        """Parses a function out of a tptp output
 
         Parameters
         ----------
@@ -231,39 +258,54 @@ class Model():
     """    
     order: int
     """Size of model"""
+    prefix: PrefixSpec
+    """Spec of the prefix operation in the model"""
+    prefix_definition: np.ndarray
+    """Definition of the prefix operation in the model"""
     operation_definitions: dict[OperationSpec, np.ndarray]
     """Definition of each operation in the model"""
     constant_definitions: dict[ConstantSpec, int]
     """Definition of each of the constants in the model"""
 
-    def __init__(self, spec: ModelSpec, operation_definitions: dict[OperationSpec, np.ndarray] | None = None, 
+    def __init__(self, spec: ModelSpec, operation_definitions: dict[OperationSpec | PrefixSpec, np.ndarray] | None = None, 
                  constant_defnitions: dict[ConstantSpec, int] | None = None, model_filename: str | None = None) -> None:
+        self.prefix = spec.prefix
         if not operation_definitions is None:
-            self.operation_definitions = operation_definitions
+            self.operation_definitions = {op: arr for op, arr in operation_definitions.items() if isinstance(op, OperationSpec)}
+            self.prefix_definition = [arr for op, arr in operation_definitions.items() if isinstance(op, PrefixSpec)][0]
             if not constant_defnitions is None:
                 self.constant_definitions = constant_defnitions
             else:
                 self.constant_definitions = {}
+            self.order = self.operation_definitions[spec.operators[0]].shape[0]
         elif not model_filename is None:
             with open(model_filename, 'r') as f:
                 result, order, constants = VampireOutputTools.order_and_constants(f.read())
-                self.constant_definitions = {c: constants[c.vampire_symbol] for c in spec.constants}
+                self.constant_definitions = {c: constants[c.tptp_symbol] for c in spec.constants}
                 self.operation_definitions = {}
-                VampireOutputTools.functions_arity_verification(result, {op.vampire_symbol: op.arity for op in spec.operators})
+                VampireOutputTools.functions_arity_verification(result, {op.tptp_symbol: op.arity for op in spec.operators})
                 for op in spec.operators:
-                    self.operation_definitions[op] = VampireOutputTools.function_parse(result, op.vampire_symbol, order, op.arity, op.default_table.dtype == np.bool_)
+                    self.operation_definitions[op] = VampireOutputTools.function_parse(result, op.tptp_symbol, order, op.arity, op.default_table.dtype == np.bool_)
+                self.order = self.operation_definitions[spec.operators[0]].shape[0]
+                if spec.prefix.default_table is None:
+                    self.prefix_definition = _get_generated_prefix_value(spec.prefix, self)
+                else:
+                    self.prefix_definition = VampireOutputTools.function_parse(result, spec.prefix.tptp_symbol, order, spec.prefix.arity, spec.prefix.default_table.dtype == np.bool_)
         else:
             self.operation_definitions = {op: op.default_table for op in spec.operators}
             self.constant_definitions = {c: c.default_value for c in spec.constants}
-        
-        self.order = self.operation_definitions[spec.operators[0]].shape[0]
+            self.order = self.operation_definitions[spec.operators[0]].shape[0]
+            if spec.prefix.default_table is None:
+                self.prefix_definition = _get_generated_prefix_value(spec.prefix, self)
+            else:
+                self.prefix_definition = spec.prefix.default_table
 
-    def calculate(self, op: OperationSpec, output_size: int, inputs: tuple[tuple[ModelArray, DimensionalReference], ...]) -> ModelArray:
+    def calculate(self, op: OperationSpec | PrefixSpec, output_size: int, inputs: tuple[tuple[ModelArray, DimensionalReference], ...]) -> ModelArray:
         """Calculates the result table of an operation
 
         Parameters
         ----------
-        op : OperationSpec
+        op : OperationSpec | PrefixSpec
             Operation to apply
         output_size : int
             Expected size of output
@@ -275,41 +317,48 @@ class Model():
         ModelArray
             Result
         """        
-        assert len(inputs)==op.default_table.ndim
+        assert len(inputs)==op.arity
         reorganized_models: list[ModelArray] = [arr[*array_dimensional_resizer(output_size, sub_dims)] for arr, sub_dims in inputs]
-        out = self._apply_function(self.operation_definitions[op], *reorganized_models)
+        out = self._apply_function(self.operation_definitions[op] if isinstance(op, OperationSpec) else self.prefix_definition, *reorganized_models)
         assert isinstance(out, np.ndarray)
         assert out.ndim == output_size
         return out
 
-    def _get_values(self, vampire_form: str) -> list[OperationSpec | ConstantSpec | int]:
+    def _get_values(self, tptp_form: str) -> list[PrefixSpec | OperationSpec | ConstantSpec | int]:
         """Gets the operations constants and variables making up a expression
 
         Parameters
         ----------
-        vampire_form : str
-            vampire string form of expression
+        tptp_form : str
+            tptp string form of expression
 
         Returns
         -------
-        list[OperationSpec | ConstantSpec | int]
+        list[PrefixSpec | OperationSpec | ConstantSpec | int]
             Ordered values of the expression
         """        
-        stripped: str = vampire_form.replace('(', '').replace(')', '').replace(',', '')
-        out: list[OperationSpec | ConstantSpec | int] = []
+        stripped: str = tptp_form.replace('(', '').replace(')', '').replace(',', '')
+
+        if '=' in stripped: #TODO: PLEASE FIX ME THIS IS SO BAD
+            stripped = "=" + stripped.replace("=", '')
+
+        out: list[PrefixSpec | OperationSpec | ConstantSpec | int] = []
         var_table: dict[str, int] = {}
         i = 0
         for c in stripped:
             found: bool = False
+            if self.prefix.tptp_symbol==c:
+                out.append(self.prefix)
+                found = True
             for op in self.operation_definitions.keys():
-                if op.vampire_symbol==c:
+                if op.tptp_symbol==c:
                     out.append(op)
                     found = True
                     break
             if found:
                 continue
             for cons in self.constant_definitions.keys():
-                if cons.vampire_symbol==c:
+                if cons.tptp_symbol==c:
                     out.append(cons)
                     found = True
                     break
@@ -322,12 +371,12 @@ class Model():
 
         return out
 
-    def compile_expression(self, vampire_form: str) -> list[CompiledElement | int | None]:
+    def compile_expression(self, tptp_form: str) -> list[CompiledElement | int | None]:
         """Compiles the compression into a more easily managed form
 
         Parameters
         ----------
-        vampire_form : str
+        tptp_form : str
             Vampire form of expression
 
         Returns
@@ -335,13 +384,12 @@ class Model():
         list[CompiledElement | int | None]
             A compiled version for easy calculation
         """        
-        values: list[OperationSpec | ConstantSpec | int] = self._get_values(vampire_form)
+        values: list[PrefixSpec | OperationSpec | ConstantSpec | int] = self._get_values(tptp_form)
         try:
-            assert isinstance(values[0], OperationSpec), "Un-prefixed Expression" 
-            assert self.operation_definitions[values[0]].dtype == np.bool_, "Un-prefixed Expression" 
+            assert isinstance(values[0], PrefixSpec), "Un-prefixed Expression" 
             assert values.count(values[0])==1, "Prefix must be unique"
         except:
-            print(vampire_form)
+            print(tptp_form)
             raise AssertionError
         function_stack: list[FunctionStackElement] = [FunctionStackElement(values[0], [values[0].arity], [])] #prefix arity
         var_count: int = max(v for v in values if isinstance(v, int)) + 1
@@ -350,8 +398,8 @@ class Model():
         compiled: list[CompiledElement | int | None] = [None] * var_count + [self.constant_definitions[c] for c in cons_list] # type: ignore
 
         for i in range(1, len(values)):
-            value: OperationSpec | ConstantSpec | int = values[i]
-            if isinstance(value, OperationSpec):
+            value: PrefixSpec | OperationSpec | ConstantSpec | int = values[i]
+            if isinstance(value, OperationSpec) or isinstance(value, PrefixSpec):
                 function_stack.append(FunctionStackElement(value, [value.arity], []))
             else:
                 if isinstance(value, ConstantSpec):
@@ -362,7 +410,10 @@ class Model():
 
                 while function_stack[-1].rem_inpts[0]==0:
                     func_info: FunctionStackElement = function_stack.pop()
-                    compiled.append(CompiledElement(self.operation_definitions[func_info.func], np.array(func_info.inpt_tab)))
+                    if isinstance(func_info.func, OperationSpec):
+                        compiled.append(CompiledElement(self.operation_definitions[func_info.func], np.array(func_info.inpt_tab)))
+                    else:
+                        compiled.append(CompiledElement(self.prefix_definition, np.array(func_info.inpt_tab)))
                     if len(function_stack)>0:
                         function_stack[-1].inpt_tab.append(len(compiled)-1)
                         function_stack[-1].rem_inpts[0] -= 1
@@ -451,13 +502,13 @@ class Model():
         
         return bool(results[-1].all()), np.argwhere(results[-1]==0)
     
-    def __call__(self, vampire_form: str, compiled: list[CompiledElement | int | None] | None = None,
+    def __call__(self, tptp_form: str, compiled: list[CompiledElement | int | None] | None = None,
                            probability: Union[Literal["Likely"], Literal["Slow"], Literal["Verify"], Literal["Fastest"]] = "Fastest") -> bool:
         """Checks if an expression is tautological
 
         Parameters
         ----------
-        vampire_form : str
+        tptp_form : str
             Vampire form of expression
         compiled : list[CompiledElement | int | None] | None
             Already compiled form, by default None
@@ -476,7 +527,7 @@ class Model():
             Improper inputs
         """        
         if compiled is None:
-            compiled = self.compile_expression(vampire_form)
+            compiled = self.compile_expression(tptp_form)
 
         if probability=="Likely" or probability=="Fastest":
             return self._check_tautological_likely(compiled)[0]
@@ -490,12 +541,12 @@ class Model():
         else:
             raise ValueError
         
-    def apply_function(self, op: OperationSpec, *arr: ModelArray) -> int | ModelArray:
+    def apply_function(self, op: OperationSpec | PrefixSpec, *arr: ModelArray) -> int | ModelArray:
         """Applies an function from this model to an array
 
         Parameters
         ----------
-        op : OperationSpec
+        op : OperationSpec | PrefixSpec
             Operator of the function to use
         arr : ModelArray
             Inputs
@@ -505,7 +556,10 @@ class Model():
         int | np.ndarray
             Result
         """        
-        return self._apply_function(self.operation_definitions[op], *arr)
+        if isinstance(op, OperationSpec):
+            return self._apply_function(self.operation_definitions[op], *arr)
+        else:
+            return self._apply_function(self.prefix_definition, *arr)
         
 CN_STANDARD_MODEL = Model(CN_SPEC)
 C0_STANDARD_MODEL = Model(C0_SPEC)
@@ -571,12 +625,12 @@ class ModelTable():
         self.counter_models.sort(key = lambda x: x.order)
         return self
     
-    def __call__(self, vampire_form: str) -> Literal["T"] | Literal["F"] | Literal["CM"]:
+    def __call__(self, tptp_form: str) -> Literal["T"] | Literal["F"] | Literal["CM"]:
         """Determines if a expression is Tautological and Not-Countermodeled, Non-Tautological, or Countermodeled
 
         Parameters
         ----------
-        vampire_form : str
+        tptp_form : str
             Vampire form of expression
 
         Returns
@@ -587,14 +641,14 @@ class ModelTable():
             CM = Countermodeled
         """        
         try:
-            if not self.target_model(vampire_form):
+            if not self.target_model(tptp_form):
                 return "F"
             for counter_model in self.counter_models:
-                if counter_model(vampire_form):
+                if counter_model(tptp_form):
                     return "CM"
             return "T"
         except:
-            raise RuntimeError(vampire_form)
+            raise RuntimeError(tptp_form)
         
     def verify_counter_model_sets(self, counter_modeling_formula_sets: list[list[str]]) -> None:
         """Checks if some sets of counter modeling formulas actually work with this model table.

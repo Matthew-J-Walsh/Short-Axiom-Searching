@@ -15,7 +15,7 @@ def FullC1() -> None:
 
     counter_modeling_formula_sets: list[list[str]] = [["t(i(i(i(X,Y),i(o,Z)),i(U,i(i(Z,X),i(V,i(W,X))))))"]]
 
-    C1 = TreeForm(C_OPERATIONS[1:]+C1_CONSTANTS, C_OPERATIONS[0], 15)
+    C1 = TreeForm(C1_SPEC, 15)
 
     Models = ModelTable(C1_SPEC, counter_model_folder=counter_model_folder)
     Models.verify_counter_model_sets(counter_modeling_formula_sets)
@@ -23,7 +23,7 @@ def FullC1() -> None:
     if not os.path.exists(unsolved_folder):
         os.makedirs(unsolved_folder)
 
-    vampire_wrapper: VampireWrapper = VampireWrapper(vampire_executable_file_path, counter_modeling_formula_sets, counter_model_folder, Models.spec, verify_models=True)
+    vampire_wrapper: TheoremProverWrapper = TheoremProverWrapper(vampire_executable_file_path, counter_modeling_formula_sets, counter_model_folder, Models.spec, verify_models=True)
 
     for i in [15, 17]:
         print("Starting length: "+str(i))

@@ -19,7 +19,7 @@ def FullLuk3VI() -> None:
                                                        "t(i(i(i(X,Y),Y),i(i(Y,X),X)))",
                                                        "t(i(i(i(i(i(X,Y),X),X),i(Y,Z)),i(Y,Z)))"]]
 
-    Luk3VI = TreeForm(LUKASIEWICZ_3VI_OPERATIONS[1:], LUKASIEWICZ_3VI_OPERATIONS[0], 5)
+    Luk3VI = TreeForm(LUKASIEWICZ_3VI_SPEC, 5)
 
     Luk3VI.verify_formulas(7)
 
@@ -29,7 +29,7 @@ def FullLuk3VI() -> None:
     if not os.path.exists(unsolved_folder):
         os.makedirs(unsolved_folder)
 
-    vampire_wrapper: VampireWrapper = VampireWrapper(vampire_executable_file_path, counter_modeling_formula_sets, counter_model_folder, Models.spec, verify_models=True)
+    vampire_wrapper: TheoremProverWrapper = TheoremProverWrapper(vampire_executable_file_path, counter_modeling_formula_sets, counter_model_folder, Models.spec, verify_models=True)
 
     for i in [17]:
         print("Starting length: "+str(i))

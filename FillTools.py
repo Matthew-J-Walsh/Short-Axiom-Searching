@@ -10,7 +10,7 @@ from MathUtilities import *
 class FillPointer(NamedTuple):
     """Holder for information on fills, importantly: hashable
     """    
-    point: int
+    idx: int
     """Fill cannonical number (the 10th fill of any size is the same except for 0s at the start)"""
     size: int
     """Size of the fill to use"""
@@ -192,7 +192,7 @@ def _generate_subsumptive_table_dumb(arr: np.ndarray) -> np.ndarray:
     return subsumptive_table
 
 @functools.cache
-def _point_to_fill_cached(fill: tuple[int, ...]) -> int:
+def _fill_to_idx_cached(fill: tuple[int, ...]) -> int:
     """Takes an properly ordered fill and returns the associated pointer
 
     Parameters
@@ -215,7 +215,7 @@ def _point_to_fill_cached(fill: tuple[int, ...]) -> int:
     return accumulator
 
 @functools.lru_cache(maxsize=10000000) #about 1gb
-def point_to_fill(fill: tuple[int, ...]) -> FillPointer:
+def _fill_to_idx(fill: tuple[int, ...]) -> FillPointer:
     """Takes an improperly ordered fill, properly orders it, and returns the associated pointer
 
     Parameters
@@ -243,15 +243,7 @@ def point_to_fill(fill: tuple[int, ...]) -> FillPointer:
             conversion[fill[i]] = next_val
             next_val += 1
         fixed_fill.append(conversion[fill[i]])
-    return FillPointer(_point_to_fill_cached(tuple(fixed_fill)), size)
-
-def _lil_sparse_or(A: sp.lil_matrix, B: sp.lil_matrix) -> sp.lil_matrix:
-    new_mat = sp.lil_matrix(A.shape)
-    rows = sorted(set(A.rows[0]) | set(B.rows[0]))
-    raise NotImplementedError
-    new_mat.rows[0]
-
-    return new_mat
+    return FillPointer(_fill_to_idx_cached(tuple(fixed_fill)), size)
 
 def _subsumed_points(arr: np.ndarray) -> list[tuple[int, ...]]:
     """Calculates whats points are subsumed by another point (in ndarray form)
@@ -275,72 +267,6 @@ def _subsumed_points(arr: np.ndarray) -> list[tuple[int, ...]]:
         points.append(tuple(n))
 
     return points
-
-def _generate_subsumptive_table_sparse(arr: np.ndarray) -> SubsumptiveTable:
-    """Generates a subsumptive table for an array of fills by generating subsumed fills
-
-    Parameters
-    ----------
-    arr : np.ndarray
-        Array holding the fills
-
-    Returns
-    -------
-    SubsumptiveTable
-        Table indicating which fills subsume which other fills
-    """    
-    subsumptive_table = sp.lil_matrix((arr.shape[0], arr.shape[0]), dtype=bool)
-
-    for i in range(arr.shape[0]):
-        subsumptive_table[i, i] = True
-        for point in _subsumed_points(arr[i]):
-            j = point_to_fill(point).point
-            subsumptive_table[i, j] = True
-            result = np.logical_or(subsumptive_table[i, :].toarray(), subsumptive_table[j, :].toarray()) # type: ignore
-            result2 = sp.csr_matrix(subsumptive_table[i, :]) + sp.csr_matrix(subsumptive_table[j, :])
-            #result3 = _lil_sparse_or(subsumptive_table[i, :], subsumptive_table[j, :]) # type: ignore
-            subsumptive_table[i, :] = result
-            #actually legal to call .toarray()
-
-    subsumptive_table = subsumptive_table.T
-
-    #dumb = _generate_subsumptive_table_dumb(size, arr)
-    #assert (subsumptive_table.toarray()==dumb).all()
-        
-    return SubsumptiveTable(subsumptive_table)
-
-def _generate_subsumptive_table(arr: np.ndarray) -> SubsumptiveTable:
-    """Generates a subsumptive table for an array of fills by iteratively creating the sets of injection points
-
-    Parameters
-    ----------
-    arr : np.ndarray
-        Array holding the fills
-
-    Returns
-    -------
-    SubsumptiveTable
-        Table indicating which fills subsume which other fills
-    """
-    subsumptive_list: list[set[int]] = []
-
-    for i in range(arr.shape[0]):
-        s = set([i])
-        for point in _subsumed_points(arr[i]):
-            j = point_to_fill(point).point
-            s.add(j)
-            s.update(subsumptive_list[j])
-        subsumptive_list.append(s)
-    
-    subsumptive_table = sp.lil_matrix((arr.shape[0], arr.shape[0]), dtype=bool)
-    for i in range(arr.shape[0]):
-        subsumptive_table[list(subsumptive_list[i]), i] = True
-
-    #subsumptive_table = subsumptive_table.T
-    #dumb = _generate_subsumptive_table_sparse(size, arr)
-    #assert (subsumptive_table.toarray()==dumb.row_wise.toarray()).all()
-
-    return SubsumptiveTable(subsumptive_table) # type: ignore
 
 def _add_with_carry(arr: np.ndarray) -> np.ndarray:
     """Iterative function for fills. Adds 1 with carry. Recursive
@@ -369,13 +295,81 @@ def _add_with_carry(arr: np.ndarray) -> np.ndarray:
 _fill_table_fills: np.ndarray = np.zeros((0, 0))
 """Holder for the current largest fill table"""
 class SubsumptiveTable:
-    row_wise: sp.csr_matrix
-    col_wise: sp.csc_matrix
+    row_indexing_list: list[np.ndarray[Any, np.dtype[np.int32]]]
+    col_indexing_list: list[np.ndarray[Any, np.dtype[np.int32]]]
     shape: tuple[int, ...]
-    def __init__(self, arr: np.ndarray | sp.sparray):
-        self.row_wise = sp.csr_matrix(arr, dtype=bool)
-        self.col_wise = sp.csc_matrix(arr, dtype=bool)
-        self.shape = arr.shape # type: ignore
+    def __init__(self, arr: np.ndarray):
+        subsumptive_list: list[set[int]] = [set((i,)) for i in range(arr.shape[0])]
+        inverted_list: list[set[int]] = [set((i,)) for i in range(arr.shape[0])]
+
+        for i in range(arr.shape[0]):
+            for point in _subsumed_points(arr[i]):
+                j = _fill_to_idx(point).idx
+                subsumptive_list[i].add(j)
+                subsumptive_list[i].update(subsumptive_list[j])
+                inverted_list[j].add(i)
+                for k in subsumptive_list[j]:
+                    inverted_list[k].add(i)
+        
+        self.row_indexing_list = []
+        for i, s in enumerate(subsumptive_list):
+            self.row_indexing_list.append(np.array(sorted(s), dtype=np.int32))
+
+        self.col_indexing_list = []
+        for i, s in enumerate(inverted_list):
+            self.col_indexing_list.append(np.array(sorted(s), dtype=np.int32))
+
+        #self.row_wise = sp.csr_matrix(arr, dtype=bool)
+        #self.col_wise = sp.csc_matrix(arr, dtype=bool)
+        self.shape = (arr.shape[0], arr.shape[0]) # type: ignore
+
+    #@profile #type: ignore
+    def fill_downward_cleave(self, fill: FillPointer) -> np.ndarray[Any, np.dtype[np.bool_]]:
+        """Calculates a downward cleave at a point. 
+        This corresponds to finding out that point i is non-tautological so all fills that imply it are also non-tautological
+
+        Parameters
+        ----------
+        i : int
+            Cleave starting point
+        size : int
+            Size of cleave to return, number of variables in the point usually
+
+        Returns
+        -------
+        np.ndarray
+            Downward Cleave
+        """
+        assert fill.idx < self.shape[0], str(fill.idx) + ", " + str(self.shape)
+        out = np.zeros(bells(fill.size), dtype=np.bool_)
+        list_point = self.col_indexing_list[fill.idx]
+        out[list_point[list_point < bells(fill.size)]] = 1
+        return out
+        #return self.col_wise[fill.point, :bells(fill.size)] # type: ignore
+
+    #@profile #type: ignore
+    def fill_upward_cleave(self, fill: FillPointer) -> np.ndarray[Any, np.dtype[np.bool_]]:
+        """Calculates an upward cleave at a point. 
+        This corresponds to finding out that point i is tautological so all fills that imply it are also tautological
+
+        Parameters
+        ----------
+        i : int
+            Cleave starting point
+        size : int
+            Size of cleave to return, number of variables in the point usually
+
+        Returns
+        -------
+        np.ndarray
+            Downward Cleave
+        """
+        assert fill.idx < self.shape[1], str(fill.idx) + ", " + str(self.shape)
+        out = np.zeros(bells(fill.size), dtype=np.bool_)
+        out[self.row_indexing_list[fill.idx]] = 1
+        return out
+        #return self.col_wise[:bells(fill.size), fill.point] # type: ignore
+
 _fill_table_subsumptive_table: SubsumptiveTable = SubsumptiveTable(np.zeros((0, 0)))
 """Holder for the current largest subsumptive table"""
 
@@ -398,9 +392,7 @@ def _initialize_fill_table(size: int) -> None:
         fills = fills.T
         fills.setflags(write=False)
         _fill_table_fills = fills
-        subsumptive_table = _generate_subsumptive_table(fills.T) #(NOT ALLOWED TODO) subtact 1 so that 0s are on cleaved values
-        subsumptive_table.row_wise.data.flags.writeable = False
-        subsumptive_table.col_wise.data.flags.writeable = False
+        subsumptive_table = SubsumptiveTable(fills.T)
         _fill_table_subsumptive_table = subsumptive_table
 
 def fill_iterator(size: int) -> Iterable[FillPointer]:
@@ -441,7 +433,7 @@ def split_fill(fill: FillPointer, split_sizes: tuple[int, ...]) -> tuple[tuple[F
     assert i >= 0, str(fill)+" ... "+str(_fill_table_fills.shape)
     splitted: list[tuple[FillPointer, DimensionalReference]] = []
     for s in split_sizes:
-        split_fill: np.ndarray[Any, np.dtype[np.int8]] = _fill_table_fills[i:i+s, fill.point]
+        split_fill: np.ndarray[Any, np.dtype[np.int8]] = _fill_table_fills[i:i+s, fill.idx]
         newfill: np.ndarray[Any, np.dtype[np.int8]] = split_fill - split_fill[0]
         injection: dict[int, int] | Literal[False] = _fill_injection(newfill, split_fill)
         assert injection
@@ -469,7 +461,7 @@ def get_fill(fill: FillPointer) -> DimensionalReference:
     DimensionalReference
         List of ints of the dimension of each fill value, classically, a fill.
     """    
-    return _fill_table_fills[-fill.size:, fill.point].tolist()
+    return _fill_table_fills[-fill.size:, fill.idx].tolist()
 
 def full_fill(size: int) -> FillPointer:
     """Creates the most general fill of a size
@@ -487,8 +479,7 @@ def full_fill(size: int) -> FillPointer:
     _initialize_fill_table(size)
     return FillPointer(bells(size)-1, size)
 
-#@profile #type: ignore
-def fill_downward_cleave(fill: FillPointer) -> sp.csr_matrix:
+def fill_downward_cleave(fill: FillPointer) -> np.ndarray[Any, np.dtype[np.bool_]]:
     """Calculates a downward cleave at a point. 
     This corresponds to finding out that point i is non-tautological so all fills that imply it are also non-tautological
 
@@ -504,12 +495,9 @@ def fill_downward_cleave(fill: FillPointer) -> sp.csr_matrix:
     np.ndarray
         Downward Cleave
     """
-    assert fill.point < _fill_table_subsumptive_table.shape[0], str(fill.point) + ", " + str(_fill_table_subsumptive_table.shape)
-    alt = _fill_table_subsumptive_table.row_wise[fill.point, :bells(fill.size)]
-    return _fill_table_subsumptive_table.col_wise[fill.point, :bells(fill.size)] # type: ignore
+    return _fill_table_subsumptive_table.fill_downward_cleave(fill)
 
-#@profile #type: ignore
-def fill_upward_cleave(fill: FillPointer) -> sp.csr_matrix:
+def fill_upward_cleave(fill: FillPointer) -> np.ndarray[Any, np.dtype[np.bool_]]:
     """Calculates an upward cleave at a point. 
     This corresponds to finding out that point i is tautological so all fills that imply it are also tautological
 
@@ -525,9 +513,7 @@ def fill_upward_cleave(fill: FillPointer) -> sp.csr_matrix:
     np.ndarray
         Downward Cleave
     """
-    assert fill.point < _fill_table_subsumptive_table.shape[1], str(fill.point) + ", " + str(_fill_table_subsumptive_table.shape)
-    alt = _fill_table_subsumptive_table.row_wise[:bells(fill.size), fill.point]
-    return _fill_table_subsumptive_table.col_wise[:bells(fill.size), fill.point] # type: ignore
+    return _fill_table_subsumptive_table.fill_upward_cleave(fill)
 
 #@profile # type: ignore
 def fill_result_disassembly_application(evaluation: ModelArray, constants: Sequence[int], cleave_direction: Literal["Upward"] | Literal["Downward"]) -> CleavingMatrix:
@@ -556,11 +542,11 @@ def fill_result_disassembly_application(evaluation: ModelArray, constants: Seque
     for constant_specifier, fills in fill_pairings.items():
         var_count: int = constant_specifier.count(0)
         inverted_cleaver = np.zeros(bells(var_count), dtype=np.bool_)
-        sorted_fills: list[FillPointer] = sorted(fills, key = lambda f: f.point, reverse = cleave_direction == "Upward")
+        sorted_fills: list[FillPointer] = sorted(fills, key = lambda f: f.idx, reverse = cleave_direction == "Upward")
         for fill in sorted_fills:
-            if inverted_cleaver[fill.point]==0:
+            if inverted_cleaver[fill.idx]==0:
                 assert fill.size == var_count, str(var_count) + " " + str(fill)
-                inverted_cleaver += fill_downward_cleave(fill).toarray().flatten() # type: ignore
+                inverted_cleaver += fill_downward_cleave(fill)
         cleavematrix.cleaves[constant_specifier] = np.logical_not(inverted_cleaver)
 
     if cleave_direction == "Upward":
@@ -594,7 +580,7 @@ def fill_disassembly_specified_fill_pairings(evaluation: ModelArray, constants: 
             if any(constant_combination.count(k)==0 for k in range(len(constants)+1)):
                 continue
             reduced_point: tuple[int, ...] = tuple([pv for ccv, pv in zip(constant_combination, falses[:, i]) if ccv==0])
-            new_point: FillPointer = point_to_fill(reduced_point)
+            new_point: FillPointer = _fill_to_idx(reduced_point)
             assert new_point.size == len(reduced_point), reduced_point
             if constant_combination in fill_pairings.keys():
                 fill_pairings[constant_combination].append(new_point)

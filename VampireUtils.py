@@ -17,23 +17,149 @@ import subprocess
 
 _VAMPIRE_MODUS_PONENS = "((t(X) & t(i(X,Y))) => t(Y))"
 
-class VampireWrapper:
+class TheoremProverWrapper:
+    """Class for a theorem proving wrapper. Called on expressions to run them in a theorem prover."""
     excecutable_location: str
-    counter_modeling_formula_sets: list[list[str]]
-    counter_model_folder: str
+    """Location of executable file"""
     model_spec: ModelSpec
-    command: list[str]
-    verification: bool
+    """Model spec in use"""
+    equational: bool
+    """Is the model equational"""
 
-    def __init__(self, executable_file: str, counter_modeling_formula_sets: list[list[str]], counter_model_folder: str, model_spec: ModelSpec,
+    def __init__(self, executable_location: str, model_spec: ModelSpec, equational: bool = False,):
+        self.excecutable_location = executable_location
+        self.model_spec = model_spec
+        self.equational = equational
+        
+    def _fof_formula_to_fof_line(self, formula: str, name: str, type: Literal["axiom"] | Literal["conjecture"]) -> str:
+        """Takes a formula and makes the appropriate single line
+
+        Parameters
+        ----------
+        formula : str
+            Formula to wrap
+        name : str
+            Name to have the formula be in the file ex: "candA", "mp".
+        type : Literal[&quot;axiom&quot;] | Literal[&quot;conjecture&quot;]
+            What tptp type it is, ex: "axiom", "conjecture"
+
+        Returns
+        -------
+        str
+            _description_
+        """        
+        vars: set[str] = {c for c in formula if c in VAMPIRE_VARIABLE_SYMBOLS}
+        return 'fof('+name+", "+type+", "+("!["+','.join(vars)+"]: " if len(vars)>0 else "")+formula+").\n"
+
+    def _generate_tptp_input_file(self, tptp_form: str, counter_model_set: list[str]) -> str:
+        if not os.path.exists("input_tmp"):
+            os.makedirs("input_tmp")
+
+        file_name: str = os.path.join("input_tmp", "tptp_run_"+str(datetime.now()))
+        for i in ['-', ' ', ':', '.']: 
+            file_name = file_name.replace(i, '')
+        file_name += '.p'
+
+        contents: str = ""
+        if not self.equational:
+            contents += self._fof_formula_to_fof_line(_VAMPIRE_MODUS_PONENS, "mp", "axiom")
+        contents += self._fof_formula_to_fof_line(tptp_form, "cand", "axiom")
+        contents += ''.join(self._fof_formula_to_fof_line(("" if cons.predicate_orientation else "~")+self.model_spec.prefix.tptp_symbol+"("+cons.tptp_symbol+")", "constant"+str(i), "axiom") 
+                            for i, cons in enumerate(self.model_spec.constants) if not cons.predicate_orientation is None)
+        contents += self._fof_formula_to_fof_line('&'.join(counter_model_set), "counter", "conjecture")
+
+        with open(file_name, 'w') as input_file:
+            input_file.write(contents)
+
+        return file_name
+
+    def __call__(self, tptp_form: str) -> bool | Model:
+        """Runs the theorem prover on the given formula
+
+        Parameters
+        ----------
+        tptp_form : str
+            TPTP form of the formula
+
+        Returns
+        -------
+        bool | Model
+            False if unmodeled
+            True if unmodeled but should be removed (raises errors if used outside hammering)
+            Model if countermodeled
+        """
+        raise NotImplementedError
+    
+    def encapsulate_candidate(self, tptp_form: str, i: int) -> str:
+        """Puts a formula into a format associated for more easy access later
+
+        Parameters
+        ----------
+        tptp_form : str
+            _description_
+        i : int
+            _description_
+
+        Returns
+        -------
+        str
+            _description_
+        """        
+        return self._fof_formula_to_fof_line(tptp_form, "cand"+str(i), "axiom")
+    
+    def hammer(self, remaining_file_name: str) -> None:
+        """"Hammer out" remaining formulas with this solver.
+
+        Parameters
+        ----------
+        remaining_file_name : str
+            Location of the remaining formulas
+        """        
+        with open(remaining_file_name, 'r') as remaining_file:
+            formulas = remaining_file.readlines()
+
+        print("Starting processing of "+str(len(formulas))+" formulas individually.")
+        
+        continuing_remainders: list[str] = []
+        held_models: list[Model] = []
+        for formula in formulas:
+            solved = False
+            for hm in held_models:
+                if hm(formula.strip()):
+                    solved = True
+                    break
+            if not solved:
+                result = self(formula.strip())
+                if result==False:
+                    continuing_remainders.append(formula.strip())
+                else:
+                    assert isinstance(result, Model)
+                    held_models.append(result)
+        
+        with open(remaining_file_name, 'w') as remaining_file:
+            remaining_file.writelines(continuing_remainders)
+
+        print(str(len(formulas))+" formulas remaing after processing.")
+        
+class VampireWrapper(TheoremProverWrapper):
+    """Wrapper for vampire theorem prover"""
+    counter_modeling_formula_sets: list[list[str]]
+    """Counter modeling formulas to use"""
+    counter_model_folder: str
+    """Location to put new counter models"""
+    command: list[str]
+    """Partially built command"""
+    verification: bool
+    """Should we verify countermodels before returning"""
+
+    def __init__(self, executable_location: str, counter_modeling_formula_sets: list[list[str]], counter_model_folder: str, model_spec: ModelSpec, equational: bool = False,
                  optional_args: dict[str, str] | None = None, optional_flags: list[str] | None = None, verify_models: bool = False):
-        self.excecutable_location = executable_file 
+        super().__init__(executable_location, model_spec, equational)
         self.counter_modeling_formula_sets = counter_modeling_formula_sets
         self.counter_model_folder = counter_model_folder
-        self.model_spec = model_spec
 
         baseline_args = {
-            "--time_limit": "60",
+            "--time_limit": "10",
             "--saturation_algorithm": "fmb",
             "--memory_limit": "4096",
             "--cores": "1",
@@ -49,7 +175,7 @@ class VampireWrapper:
         else:
             flags = baseline_flags
 
-        self.command = [executable_file]
+        self.command = [executable_location]
         for flag in flags:
             self.command.append(flag)
         for arg, val in full_args.items():
@@ -59,92 +185,26 @@ class VampireWrapper:
         assert not "--fmb_start_size" in self.command, "--fmb_start_size is iterated on, don't give as input please"
 
         self.verification = verify_models
-        
-    def _vampire_expression_to_fof_line(self, expression: str, name: str, type: Literal["axiom"] | Literal["conjecture"]) -> str:
-        vars: set[str] = {c for c in expression if c in VAMPIRE_VARIABLE_SYMBOLS}
-        return 'fof('+name+", "+type+", "+("!["+','.join(vars)+"]: " if len(vars)>0 else "")+expression+").\n"
-
-    def _generate_vampire_input_file(self, vampire_form: str, counter_model_set: list[str]) -> str:
-        if not os.path.exists("input_tmp"):
-            os.makedirs("input_tmp")
-
-        file_name: str = os.path.join("input_tmp", "vampire_run_"+str(datetime.now()))
-        for i in ['-', ' ', ':', '.']: 
-            file_name = file_name.replace(i, '')
-        file_name += '.p'
-
-        contents: str = ""
-        contents += self._vampire_expression_to_fof_line(_VAMPIRE_MODUS_PONENS, "mp", "axiom")
-        contents += self._vampire_expression_to_fof_line(vampire_form, "cand", "axiom")
-        contents += ''.join(self._vampire_expression_to_fof_line(("" if cons.predicate_orientation else "~")+self.model_spec.operators[0].vampire_symbol+"("+cons.vampire_symbol+")", "constant"+str(i), "axiom") 
-                            for i, cons in enumerate(self.model_spec.constants) if not cons.predicate_orientation is None)
-        contents += self._vampire_expression_to_fof_line('&'.join(counter_model_set), "counter", "conjecture")
-
-        with open(file_name, 'w') as input_file:
-            input_file.write(contents)
-
-        return file_name
-
-    def __call__(self, vampire_form: str) -> bool | Model:
-        for fmb_start_size in [2, 6, 7, 8]:
-            for counter_formula_set in self.counter_modeling_formula_sets:
-                input_file_name: str = self._generate_vampire_input_file(vampire_form, counter_formula_set)
-
-                result: str = subprocess.run(self.command + ["--fmb_start_size", str(fmb_start_size)] + [input_file_name], capture_output=True, text=True).stdout
-
-                if not "Finite Model Found!" in result:
-                    #print(result)
-                    #raise ValueError(result)
-                    #os.remove(input_file_name)
-                    continue
-                else:
-                    model: Model = Model(self.model_spec, model_filename = self.save_countermodel(result))
-                    if self.verification:
-                        assert model(vampire_form), str(model)+"\n"+vampire_form
-                        assert not all(model(counter_formula) for counter_formula in counter_formula_set), str(model)+"\n"+str(counter_formula_set)
-
-                    os.remove(input_file_name)
-                    return model
-                
-        return False
-    
-    def hammer(self, remaining_file_name: str) -> None:
-        with open(remaining_file_name, 'r') as remaining_file:
-            formulas = remaining_file.readlines()
-
-        print("Starting processing of "+str(len(formulas))+" formulas individually.")
-        
-        continuing_remainders: list[str] = []
-        held_models: list[Model] = []
-        for formula in formulas:
-            solved = False
-            for hm in held_models:
-                if hm(formula):
-                    solved = True
-                    break
-            if not solved:
-                result = self(formula)
-                if result==False:
-                    continuing_remainders.append(formula)
-                else:
-                    assert isinstance(result, Model)
-                    held_models.append(result)
-        
-        with open(remaining_file_name, 'r') as remaining_file:
-            remaining_file.writelines(continuing_remainders)
-
-        print(str(len(formulas))+" formulas remaing after processing.")
-    
-    @staticmethod
-    def _revariablize_count_model_set(counter_model_set: list[str]) -> list[str]:
-        raise NotImplementedError
 
     def wipe_counter_models(self) -> None:
+        """Deletes the counter models in the folder"""
         if os.path.exists(self.counter_model_folder) and os.path.isdir(self.counter_model_folder):
             for counter_model_filename in os.listdir(self.counter_model_folder):
                 os.remove(os.path.join(self.counter_model_folder, counter_model_filename))
 
     def save_countermodel(self, result: str) -> str:
+        """Saves a vampire countermodel to a file
+
+        Parameters
+        ----------
+        result : str
+            Vampire output
+
+        Returns
+        -------
+        str
+            Filename it was saved in
+        """
         try:
             _, size, _ = VampireOutputTools.order_and_constants(result)
             base_file_name: str = "countermodel-"+str(size)+"-"
@@ -159,91 +219,49 @@ class VampireWrapper:
         except:
             print(result)
             raise RuntimeError
-        
-class BlankVampireWrapper(VampireWrapper):
-    def __init__(self) -> None:
-        pass
 
-    def __call__(self, vampire_form: str) -> bool | Model:
-        return False
+    def __call__(self, tptp_form: str) -> bool | Model:
+        """Runs the vampire theorem prover on the given formula
 
-def create_vampire_countermodel_instance(executable_file: str, counter_modeling_formula_sets: list[list[str]], counter_model_folder: str, model_spec: ModelSpec,
-                                         optional_args: dict[str, str] | None = None, optional_flags: list[str] | None = None, verify_models: bool = False) -> VampireWrapper:
-    """Creates a vampire wrapper specified by inputs
+        Parameters
+        ----------
+        tptp_form : str
+            TPTP form of the formula
 
-    Parameters
-    ----------
-    executable_file : str
-        vampire executable filepath
-    counter_modeling_formula_sets : list[list[str]]
-        Lists of countermodeling lists (usually known tautologies forming axiom systems)
-    optional_args : dict[str, str] | None, optional
-        Added arguments for vampire executable, by default None
-    optional_flags : list[str] | None, optional
-        Added flags for vampire executable, by default None
-    verify_models : bool, optional
-        Should models be verified before returning (used for debugging), by default False
-
-    Returns
-    -------
-    VampireWrapper
-        Function that calculates counter-models
-    """    
-    raise DeprecationWarning
-    baseline_args = {
-        "-t": "240",
-        "-sa": "fmb",
-    }
-    if optional_args:
-        full_args: dict[str, str] = {**baseline_args, **optional_args}
-    else:
-        full_args = baseline_args
-
-    baseline_flags: list[str] = []
-    if optional_flags:
-        flags: list[str] = list(set(baseline_flags + optional_flags))
-    else:
-        flags = baseline_flags
-
-    command: list[str] = [executable_file]
-    for flag in flags:
-        command.append(flag)
-    for arg, val in full_args.items():
-        command.append(arg)
-        command.append(val)
-
-    assert not "--fmb_start_size" in command, "--fmb_start_size is iterated on, don't give as input please"
-
-    if not os.path.exists(counter_model_folder):
-        os.makedirs(counter_model_folder)
-    
-    def vampire_wrapper(vampire_form: str) -> bool | Model:
-        for fmb_start_size in [2, 6, 7, 8]:
-            for counter_formula_set in counter_modeling_formula_sets:
-                input_file_name: str = _generate_vampire_input_file(vampire_form, counter_formula_set)
-
-                result: str = subprocess.run(command + ["--fmb_start_size", str(fmb_start_size)] + [input_file_name], capture_output=True, text=True).stdout
+        Returns
+        -------
+        bool | Model
+            False if unmodeled
+            True if unmodeled but should be removed (raises errors if used outside hammering)
+            Model if countermodeled
+        """
+        for counter_formula_set in self.counter_modeling_formula_sets:
+            input_file_name: str = self._generate_tptp_input_file(tptp_form, counter_formula_set)
+            for fmb_start_size in [2, 6, 7, 8]:
+                result: str = subprocess.run(self.command + ["--fmb_start_size", str(fmb_start_size)] + [input_file_name], capture_output=True, text=True).stdout
 
                 if not "Finite Model Found!" in result:
                     #print(result)
-                    #raise ValueError()
+                    #raise ValueError(result)
+                    #os.remove(input_file_name)
                     continue
                 else:
-                    model: Model = Model(model_spec, model_filename=save_countermodel(result, counter_model_folder))
-                    if verify_models:
-                        assert model(vampire_form), str(model)+"\n"+vampire_form
+                    model: Model = Model(self.model_spec, model_filename = self.save_countermodel(result))
+                    if self.verification:
+                        assert model(tptp_form), str(model)+"\n"+tptp_form
                         assert not all(model(counter_formula) for counter_formula in counter_formula_set), str(model)+"\n"+str(counter_formula_set)
 
                     os.remove(input_file_name)
                     return model
                 
-                
+        return False
+        
+class BlankTheoremProverWrapper(TheoremProverWrapper):
+    """TheoremProverWrapper that returns False always
+    """    
+    def __init__(self, *args) -> None:
+        pass
+
+    def __call__(self, tptp_form: str) -> bool | Model:
         return False
 
-    return vampire_wrapper
-
-def wipe_counter_models(counter_model_folder: str) -> None:
-    raise DeprecationWarning
-    if os.path.exists(counter_model_folder) and os.path.isdir(counter_model_folder):
-        for counter_model_filename in os.listdir(counter_model_folder):
-            os.remove(os.path.join(counter_model_folder, counter_model_filename))
