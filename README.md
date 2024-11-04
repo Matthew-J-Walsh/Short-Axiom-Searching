@@ -1,9 +1,10 @@
 # Short-Axiom-Searching
  
-Examples for running the first half, the generation of all tautologies of a specific length can be found in Examples.ipynb
+Made by Matthew Walsh with the help of Branden Fitelson, Northeastern University.
 
-Examples for running the second half, the generation of counter models for tautologies, can also be found in Examples.ipynb. Notably, in general the settings used for vampire were:
-"--mode casc_sat -t 240 --fmb_start_size 2" 
-Sometimes t was 600, 1000, or 2000.
+Used to prove that Meredith's 21-symbol single axiom of classical sentential logic is the shortest possible, in addition to finding other axioms of length 21.
 
-Functions in VampireHandler.py are still being tested as of 11/29/21
+Used to prove that Meredith's 19-symbol single axioms of classical sentential logic with the fulsum operator are the shortest possible, in addition to finding other axioms of length 21.
+
+Original preprint: http://fitelson.org/walsh.pdf
+
