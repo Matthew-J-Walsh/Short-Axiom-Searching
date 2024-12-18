@@ -97,6 +97,10 @@ CLASSICAL_IMPLICATION = OperationSpec("C", "i", 2, numpy_read_only_array([[1, 1]
 """Definition of classical implication function"""
 CLASSICAL_NEGATION = OperationSpec("N", "n", 1, numpy_read_only_array([1, 0]))
 """Definition of classical negation function"""
+CLASSICAL_DISJUNCTION = OperationSpec("D", "o", 2, numpy_read_only_array([[0, 1], [1, 1]]))
+"""Definition of classical or operator"""
+CLASSICAL_CONJUNCTION = OperationSpec("C", "a", 2, numpy_read_only_array([[0, 0], [0, 1]]))
+"""Definition of classical and operator"""
 CLASSICAL_TRUE = ConstantSpec("T", "o", 1, True)
 """Definition of classical True constant"""
 CLASSICAL_FALSE = ConstantSpec("F", "f", 0, False)
@@ -112,9 +116,13 @@ PURE_EQUALITY = PrefixSpec("=", "=", 2, None, "Infix", True)
 
 CN_OPERATIONS: tuple[OperationSpec, ...] = (CLASSICAL_IMPLICATION, CLASSICAL_NEGATION)
 """Operations for Propositional logic"""
-CN_CONSTANTS: tuple[ConstantSpec, ...] = ()
-"""Constants for Propositional logic"""
-CN_SPEC: ModelSpec = ModelSpec(CLASSICAL_TRUTH, CN_OPERATIONS, CN_CONSTANTS)
+DN_OPERATIONS: tuple[OperationSpec, ...] = (CLASSICAL_DISJUNCTION, CLASSICAL_NEGATION)
+"""Operations for disjunction + negation logics"""
+AN_OPERATIONS: tuple[OperationSpec, ...] = (CLASSICAL_CONJUNCTION, CLASSICAL_NEGATION)
+"""Operations for conjunction + negation logics"""
+NO_CONSTANTS: tuple[ConstantSpec, ...] = ()
+"""Empty constant list"""
+CN_SPEC: ModelSpec = ModelSpec(CLASSICAL_TRUTH, CN_OPERATIONS, NO_CONSTANTS)
 """Spec for Propositional logic"""
 C_OPERATIONS: tuple[OperationSpec, ...] = (CLASSICAL_IMPLICATION,)
 """Operations for Implicational logics"""
@@ -132,8 +140,16 @@ LUKASIEWICZ_3VI_CONSTANTS: tuple[ConstantSpec, ...] = ()
 """Constants for Lukasiewicz 3-valued logic system implicational fragment"""
 LUKASIEWICZ_3VI_SPEC: ModelSpec = ModelSpec(CLASSICAL_TRUTH, LUKASIEWICZ_3VI_OPERATIONS, LUKASIEWICZ_3VI_CONSTANTS)
 """Spec for Lukasiewicz 3-valued logic system implicational fragment"""
-BOOLEAN_ALGEBRA_CN_SPEC: ModelSpec = ModelSpec(PURE_EQUALITY, CN_OPERATIONS, CN_CONSTANTS)
+BOOLEAN_ALGEBRA_CN_SPEC: ModelSpec = ModelSpec(PURE_EQUALITY, CN_OPERATIONS, NO_CONSTANTS)
 """Spec for boolean algebra with implication and negation operators"""
+BOOLEAN_ALGEBRA_DN_SPEC: ModelSpec = ModelSpec(PURE_EQUALITY, DN_OPERATIONS, NO_CONSTANTS)
+"""Spec for boolean algebra with disjunction and negation operators"""
+BOOLEAN_ALGEBRA_AN_SPEC: ModelSpec = ModelSpec(PURE_EQUALITY, AN_OPERATIONS, NO_CONSTANTS)
+"""Spec for boolean algebra with conjunction and negation operators"""
+BOOLEAN_ALGEBRA_CF_SPEC: ModelSpec = ModelSpec(PURE_EQUALITY, C_OPERATIONS, C0_CONSTANTS)
+"""Spec for boolean algebra with implication and falsum"""
+BOOLEAN_ALGEBRA_C_SPEC: ModelSpec = ModelSpec(PURE_EQUALITY, C_OPERATIONS, NO_CONSTANTS)
+"""Spec for boolean algebra with just implication"""
 
 
 VERIFY_ALL_FORMULAS: bool = False

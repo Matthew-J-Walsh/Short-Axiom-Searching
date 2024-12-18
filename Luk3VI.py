@@ -1,7 +1,7 @@
 from Globals import *
 from ModelTools import *
 from TreeForms import *
-from VampireUtils import *
+from TheoremProverUtils import *
 
 import time
 

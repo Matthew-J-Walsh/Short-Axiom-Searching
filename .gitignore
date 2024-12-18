@@ -27,3 +27,12 @@ testingTracker.py
 Luk3VI19prun.txt
 /BACNCounterModels
 /BACNRemaining
+/BAONCounterModels
+/BAONRemaining
+*.in
+/BAANCounterModels
+/BAANRemaining
+/BACCounterModels
+/BACFCounterModels
+/BACFRemaining
+/BACRemaining

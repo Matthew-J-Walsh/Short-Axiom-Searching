@@ -214,7 +214,7 @@ def _fill_to_idx_cached(fill: tuple[int, ...]) -> int:
 
     return accumulator
 
-@functools.lru_cache(maxsize=10000000) #about 1gb
+@functools.lru_cache(maxsize=100000) #about 1gb
 def _fill_to_idx(fill: tuple[int, ...]) -> FillPointer:
     """Takes an improperly ordered fill, properly orders it, and returns the associated pointer
 

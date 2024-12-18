@@ -3,7 +3,7 @@ from __future__ import annotations
 from Globals import *
 from MathUtilities import degenerate_constant_combinations, nondegenerate_constant_combinations
 from ModelTools import *
-from VampireUtils import *
+from TheoremProverUtils import *
 from FillTools import *
 from ProgressUtils import *
 
@@ -1024,7 +1024,7 @@ class TreeForm:
                             counts[new_s] += new_c
                         else:
                             counts[new_s] = new_c
-        
+
         return tuple(counts.items())
     
     def form_count(self, size: int, allow_degenerate: bool = False) -> int:
