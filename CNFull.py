@@ -3,8 +3,6 @@ from ModelTools import *
 from TreeForms import *
 from TheoremProverUtils import *
 
-import time
-
 def FullCN() -> None:
     vampire_executable_file_path = os.path.join("theorem_provers", "vampire")
     unsolved_folder = "CNRemaining"
@@ -27,7 +25,7 @@ def FullCN() -> None:
 
     vampire_wrapper: TheoremProverWrapper = TheoremProverWrapper(vampire_executable_file_path, counter_modeling_formula_sets, counter_model_folder, Models.spec, verify_models=True)
 
-    for i in [11]:
+    for i in [11, 13]:
         print("Starting length: "+str(i))
         start_time = time.time()
         progress_tracker = ProgressTracker(CN.form_count(i))

@@ -3,8 +3,6 @@ from ModelTools import *
 from TreeForms import *
 from TheoremProverUtils import *
 
-import time
-
 BACFETargetLength = 14
 
 def BACF():

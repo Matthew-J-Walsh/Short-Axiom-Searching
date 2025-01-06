@@ -3,8 +3,6 @@ from ModelTools import *
 from TreeForms import *
 from TheoremProverUtils import *
 
-import time
-
 def FullC1() -> None:
     vampire_executable_file_path = os.path.join("theorem_provers", "vampire")
     unsolved_folder = "C1Remaining"

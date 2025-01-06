@@ -5,8 +5,9 @@ from TheoremProverUtils import *
 
 BACETargetLength = 20
 
-def BAC():
-    vampire_executable_file_path, prover9_executable_file_path, unsolved_folder, counter_model_folder, save_file_base, counter_modeling_formula_sets, BAC, Models = setup()
+def main(name: str, target_length: int, spec: ModelSpec, counter_modeling_formula_sets: list[list[str]], 
+         progress_tracker_override: int = -1, run_type: str = "Standard"):
+    vampire_executable_file_path, prover9_executable_file_path, unsolved_folder, counter_model_folder, save_file_base, counter_modeling_formula_sets, BAC, Models = setup(name, spec, counter_modeling_formula_sets)
 
     vampire_wrapper: TheoremProverWrapper = VampireWrapper(vampire_executable_file_path, counter_modeling_formula_sets, counter_model_folder, Models.spec, verify_models=True, equational=True)
     for i in [BACETargetLength]:
@@ -23,45 +24,40 @@ def BAC():
     
     Models.verify_counter_model_sets(counter_modeling_formula_sets)
 
-def Hammer():
-    vampire_executable_file_path, prover9_executable_file_path, unsolved_folder, counter_model_folder, save_file_base, counter_modeling_formula_sets, BAC, Models = setup()
+def Hammer(name: str, spec: ModelSpec, counter_modeling_formula_sets: list[list[str]]):
+    vampire_executable_file_path, prover9_executable_file_path, unsolved_folder, counter_model_folder, save_file_base, counter_modeling_formula_sets, BAC, Models = setup(name, spec, counter_modeling_formula_sets)
     vampire_wrapper: TheoremProverWrapper = VampireWrapper(vampire_executable_file_path, counter_modeling_formula_sets, counter_model_folder, Models.spec, verify_models=True, equational=True, optional_args={"-t": "2"})
     for i in [BACETargetLength]:
         print("Starting length: "+str(i))
         unsolved_file = os.path.join(unsolved_folder, "BAC"+str(i)+"Rem.txt")
         vampire_wrapper.hammer(unsolved_file)
 
-def Prover9_Hammer():
-    vampire_executable_file_path, prover9_executable_file_path, unsolved_folder, counter_model_folder, save_file_base, counter_modeling_formula_sets, BAC, Models = setup()
+def Prover9_Hammer(name: str, spec: ModelSpec, counter_modeling_formula_sets: list[list[str]]):
+    vampire_executable_file_path, prover9_executable_file_path, unsolved_folder, counter_model_folder, save_file_base, counter_modeling_formula_sets, BAC, Models = setup(name, spec, counter_modeling_formula_sets)
     prover9_wrapper: TheoremProverWrapper = Prover9Wrapper(prover9_executable_file_path, Models.spec, equational=True)
     for i in [BACETargetLength]:
         print("Starting length: "+str(i))
-        unsolved_file = os.path.join(unsolved_folder, "BAC"+str(i)+"Rem.txt")
-        new_unsolved_file = os.path.join(unsolved_folder, "BAC"+str(i)+"Rem-fastpass.txt")
+        unsolved_file = os.path.join(unsolved_folder, name+str(i)+"Rem.txt")
+        new_unsolved_file = os.path.join(unsolved_folder, name+str(i)+"Rem-fastpass.txt")
         prover9_wrapper.hammer(unsolved_file, new_unsolved_file)
 
-def setup():
+def setup(name: str, spec: ModelSpec, counter_modeling_formula_sets: list[list[str]], cache_size: int = 14):
     vampire_executable_file_path = os.path.join("theorem_provers", "vampire")
     prover9_executable_file_path = os.path.join("theorem_provers", "prover9")
-    unsolved_folder = "BACRemaining"
-    counter_model_folder = "BACCounterModels"
-    save_file_base = os.path.join("partial_run_saves", "BAC")
+    unsolved_folder = name+"Remaining"
+    counter_model_folder = name+"CounterModels"
+    save_file_base = os.path.join("partial_run_saves", name)
 
-    counter_modeling_formula_sets: list[list[str]] = [["i(i(P,Q),P)=P",
-                                                       "i(i(P,Q),i(R,Q))=i(i(Q,P),i(R,P))"]]
+    treeForm = TreeForm(spec, cache_size)
 
-    BAC = TreeForm(BOOLEAN_ALGEBRA_C_SPEC, 14)
+    treeForm.verify_formulas(8)
 
-    BAC.verify_formulas(8)
-
-    #BAC.dump_formulas(7)
-
-    Models = ModelTable(BOOLEAN_ALGEBRA_C_SPEC, counter_model_folder=counter_model_folder)
+    Models = ModelTable(spec, counter_model_folder=counter_model_folder)
     Models.verify_counter_model_sets(counter_modeling_formula_sets)
 
     if not os.path.exists(unsolved_folder):
         os.makedirs(unsolved_folder)
-    return vampire_executable_file_path, prover9_executable_file_path, unsolved_folder, counter_model_folder, save_file_base, counter_modeling_formula_sets, BAC, Models
+    return vampire_executable_file_path, prover9_executable_file_path, unsolved_folder, counter_model_folder, save_file_base, counter_modeling_formula_sets, treeForm, Models
 
 
 

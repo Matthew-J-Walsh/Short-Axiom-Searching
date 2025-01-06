@@ -1,9 +1,6 @@
 from __future__ import annotations
-from typing import Any
-
 
 from Globals import *
-
 from MathUtilities import *
 
 #Fill = tuple[int, int]
@@ -294,7 +291,7 @@ def _add_with_carry(arr: np.ndarray) -> np.ndarray:
 
 _fill_table_fills: np.ndarray = np.zeros((0, 0))
 """Holder for the current largest fill table"""
-class SubsumptiveTable:
+class SubsumptiveTableHeavy:
     row_indexing_list: list[np.ndarray[Any, np.dtype[np.int32]]]
     col_indexing_list: list[np.ndarray[Any, np.dtype[np.int32]]]
     shape: tuple[int, ...]
@@ -369,6 +366,87 @@ class SubsumptiveTable:
         out[self.row_indexing_list[fill.idx]] = 1
         return out
         #return self.col_wise[:bells(fill.size), fill.point] # type: ignore
+
+class SubsumptiveTable:
+    subsumptive_list: list[set[int]]
+    inverted_list: list[set[int]]
+    shape: tuple[int, ...]
+    def __init__(self, arr: np.ndarray):
+        self.subsumptive_list = [set((i,)) for i in range(arr.shape[0])]
+        self.inverted_list = [set((i,)) for i in range(arr.shape[0])]
+
+        for i in range(arr.shape[0]):
+            for point in _subsumed_points(arr[i]):
+                j = _fill_to_idx(point).idx
+                self.subsumptive_list[i].add(j)
+                #subsumptive_list[i].update(subsumptive_list[j])
+                self.inverted_list[j].add(i)
+                #for k in subsumptive_list[j]:
+                #    inverted_list[k].add(i)
+
+        self.shape = (arr.shape[0], arr.shape[0]) # type: ignore
+
+    #@profile #type: ignore
+    def fill_downward_cleave(self, fill: FillPointer) -> np.ndarray[Any, np.dtype[np.bool_]]:
+        """Calculates a downward cleave at a point. 
+        This corresponds to finding out that point i is non-tautological so all fills that imply it are also non-tautological
+
+        Parameters
+        ----------
+        i : int
+            Cleave starting point
+        size : int
+            Size of cleave to return, number of variables in the point usually
+
+        Returns
+        -------
+        np.ndarray
+            Downward Cleave
+        """
+        assert fill.idx < self.shape[0], str(fill.idx) + ", " + str(self.shape)
+        out = np.zeros(bells(fill.size), dtype=np.bool_)
+        list_points = self.full_set_helper(self.inverted_list[fill.idx], self.inverted_list)
+        max_point: int = bells(fill.size)
+        list_points = [p for p in list_points if p < max_point]
+        out[list_points] = 1
+        return out
+
+    #@profile #type: ignore
+    def fill_upward_cleave(self, fill: FillPointer) -> np.ndarray[Any, np.dtype[np.bool_]]:
+        """Calculates an upward cleave at a point. 
+        This corresponds to finding out that point i is tautological so all fills that imply it are also tautological
+
+        Parameters
+        ----------
+        i : int
+            Cleave starting point
+        size : int
+            Size of cleave to return, number of variables in the point usually
+
+        Returns
+        -------
+        np.ndarray
+            Downward Cleave
+        """
+        assert fill.idx < self.shape[1], str(fill.idx) + ", " + str(self.shape)
+        out = np.zeros(bells(fill.size), dtype=np.bool_)
+        list_points = list(self.full_set_helper(self.subsumptive_list[fill.idx], self.subsumptive_list))
+        out[list_points] = 1
+        return out
+
+    @staticmethod
+    def full_set_helper(s, ref):
+        visited = set()
+        queue = set(s)
+
+        while queue:
+            c = queue.pop()
+            if c not in visited:
+                visited.add(c)
+                queue.update(ref[c] - visited)
+    
+        return visited
+
 
 _fill_table_subsumptive_table: SubsumptiveTable = SubsumptiveTable(np.zeros((0, 0)))
 """Holder for the current largest subsumptive table"""
