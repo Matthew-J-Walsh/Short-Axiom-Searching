@@ -291,7 +291,7 @@ def _add_with_carry(arr: np.ndarray) -> np.ndarray:
 
 _fill_table_fills: np.ndarray = np.zeros((0, 0))
 """Holder for the current largest fill table"""
-class SubsumptiveTableHeavy:
+class SubsumptiveTableOld:
     row_indexing_list: list[np.ndarray[Any, np.dtype[np.int32]]]
     col_indexing_list: list[np.ndarray[Any, np.dtype[np.int32]]]
     shape: tuple[int, ...]

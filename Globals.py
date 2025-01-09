@@ -17,6 +17,7 @@ from datetime import datetime
 from collections import Counter
 from typing import Any
 import warnings
+import argparse
 #import psutil
 
 VARIABLE_SYMBOLS = string.ascii_lowercase
@@ -153,6 +154,13 @@ BOOLEAN_ALGEBRA_CF_SPEC: ModelSpec = ModelSpec(PURE_EQUALITY, C_OPERATIONS, C0_C
 """Spec for boolean algebra with implication and falsum"""
 BOOLEAN_ALGEBRA_C_SPEC: ModelSpec = ModelSpec(PURE_EQUALITY, C_OPERATIONS, NO_CONSTANTS)
 """Spec for boolean algebra with just implication"""
+
+def get_spec_reference(name: str) -> ModelSpec:
+    match name:
+        case "BAC":
+            return BOOLEAN_ALGEBRA_C_SPEC
+        case _:
+            raise ValueError("Unknown spec: "+name)
 
 
 VERIFY_ALL_FORMULAS: bool = False
