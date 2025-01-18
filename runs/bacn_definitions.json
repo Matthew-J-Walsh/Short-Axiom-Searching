@@ -1,0 +1,36 @@
+{
+    "name": "BACN",
+    "counter_modeling_formulas": [
+        "(i(n(X),i(Y,Z))=i(i(Z,X),i(Y,X)))",
+        "(i(i(X,Y),X)=X)"
+    ],
+    "vampire_template": [
+        "fof(known,conjecture,![X,Y,Z]: (i(n(X),i(Y,Z))=i(i(Z,X),i(Y,X))) & (i(i(X,Y),X)=X))."
+    ],
+    "prover9_template": [
+
+    ],
+    "predicate": {
+        "symbol": "=", 
+        "tptp_symbol": "=", 
+        "arity": 2, 
+        "default_table": null,
+        "formation_style": "Infix",
+        "mirrored": true
+    },
+    "operators": [
+        {
+            "symbol": "C", 
+            "tptp_symbol": "i", 
+            "arity": 2, 
+            "default_table": [[1, 1], [0, 1]]
+        },
+        {
+            "symbol": "N", 
+            "tptp_symbol": "n", 
+            "arity": 1, 
+            "default_table": [1, 0]
+        }
+    ],
+    "constants": []
+}

@@ -1,0 +1,40 @@
+{
+    "name": "LUK3VI",
+    "counter_modeling_formulas": [
+        "t(i(X,i(Y,X)))",
+        "t(i(i(X,Y),i(i(Y,Z),i(X,Z))))",
+        "t(i(i(X,i(Y,Z)),i(Y,i(X,Z))))",
+        "t(i(i(i(X,Y),Y),i(i(Y,X),X)))",
+        "t(i(i(i(i(i(X,Y),X),X),i(Y,Z)),i(Y,Z)))"
+    ],
+    "vampire_template": [
+        "fof(mp,axiom,![X,Y]: ((t(X) & t(i(X,Y))) => t(Y))).",
+        "fof(known,conjecture,![X,Y,Z]: t(i(X,i(Y,X))) & t(i(i(X,Y),i(i(Y,Z),i(X,Z)))) & t(i(i(X,i(Y,Z)),i(Y,i(X,Z)))) & t(i(i(i(X,Y),Y),i(i(Y,X),X))) & t(i(i(i(i(i(X,Y),X),X),i(Y,Z)),i(Y,Z))))."
+    ],
+    "prover9_template": [
+
+    ],
+    "predicate": {
+        "symbol": "T", 
+        "tptp_symbol": "t", 
+        "arity": 1, 
+        "default_table": [false, false, true],
+        "formation_style": "Polish",
+        "mirrored": false
+    },
+    "operators": [
+        {
+            "symbol": "C", 
+            "tptp_symbol": "i", 
+            "arity": 2, 
+            "default_table": [[2, 2, 2], [1, 2, 2], [0, 1, 2]]
+        },
+        {
+            "symbol": "N", 
+            "tptp_symbol": "n", 
+            "arity": 1, 
+            "default_table": [2, 1, 0]
+        }
+    ],
+    "constants": []
+}

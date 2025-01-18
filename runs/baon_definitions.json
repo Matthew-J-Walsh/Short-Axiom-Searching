@@ -1,0 +1,35 @@
+{
+    "name": "BAON",
+    "counter_modeling_formulas": [
+        "n(o(n(o(n(o(X,Y)),Z)),n(o(n(o(n(Z),n(o(U,Z)))),Y))))=Z"
+    ],
+    "vampire_template": [
+        "fof(known,conjecture,![X,Y,Z,U]: n(o(n(o(n(o(X,Y)),Z)),n(o(n(o(n(Z),n(o(U,Z)))),Y))))=Z)."
+    ],
+    "prover9_template": [
+
+    ],
+    "predicate": {
+        "symbol": "=", 
+        "tptp_symbol": "=", 
+        "arity": 2, 
+        "default_table": null,
+        "formation_style": "Infix",
+        "mirrored": true
+    },
+    "operators": [
+        {
+            "symbol": "D", 
+            "tptp_symbol": "o", 
+            "arity": 2, 
+            "default_table": [[0, 1], [1, 1]]
+        },
+        {
+            "symbol": "N", 
+            "tptp_symbol": "n", 
+            "arity": 1, 
+            "default_table": [1, 0]
+        }
+    ],
+    "constants": []
+}

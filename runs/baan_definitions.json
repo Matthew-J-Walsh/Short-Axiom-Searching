@@ -1,0 +1,38 @@
+{
+    "name": "BAAN",
+    "counter_modeling_formulas": [
+        "a(P,a(Q,R))=a(Q,a(R,P))",
+        "a(P,P)=P",
+        "a(P,n(a(P,n(Q))))=a(P,Q)",
+        "a(P,n(P))=a(Q,n(Q))"
+    ],
+    "vampire_template": [
+        "fof(known,conjecture,![P,Q,R]: (a(P,a(Q,R))=a(Q,a(R,P))) & (a(P,P)=P) & (a(P,n(a(P,n(Q))))=a(P,Q)) & (a(P,n(P))=a(Q,n(Q))))."
+    ],
+    "prover9_template": [
+
+    ],
+    "predicate": {
+        "symbol": "=", 
+        "tptp_symbol": "=", 
+        "arity": 2, 
+        "default_table": null,
+        "formation_style": "Infix",
+        "mirrored": true
+    },
+    "operators": [
+        {
+            "symbol": "C", 
+            "tptp_symbol": "a", 
+            "arity": 2, 
+            "default_table": [[0, 0], [0, 1]]
+        },
+        {
+            "symbol": "N", 
+            "tptp_symbol": "n", 
+            "arity": 1, 
+            "default_table": [1, 0]
+        }
+    ],
+    "constants": []
+}

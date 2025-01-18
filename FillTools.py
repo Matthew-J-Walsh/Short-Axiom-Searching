@@ -291,15 +291,17 @@ def _add_with_carry(arr: np.ndarray) -> np.ndarray:
 
 _fill_table_fills: np.ndarray = np.zeros((0, 0))
 """Holder for the current largest fill table"""
-class SubsumptiveTableOld:
+class SubsumptiveTable:
     row_indexing_list: list[np.ndarray[Any, np.dtype[np.int32]]]
     col_indexing_list: list[np.ndarray[Any, np.dtype[np.int32]]]
     shape: tuple[int, ...]
     def __init__(self, arr: np.ndarray):
-        subsumptive_list: list[set[int]] = [set((i,)) for i in range(arr.shape[0])]
-        inverted_list: list[set[int]] = [set((i,)) for i in range(arr.shape[0])]
+        self.shape = (arr.shape[0], arr.shape[0])
 
-        for i in range(arr.shape[0]):
+        subsumptive_list: list[set[int]] = [set((i,)) for i in range(self.shape[0])]
+        inverted_list: list[set[int]] = [set((i,)) for i in range(self.shape[0])]
+
+        for i in range(self.shape[0]):
             for point in _subsumed_points(arr[i]):
                 j = _fill_to_idx(point).idx
                 subsumptive_list[i].add(j)
@@ -318,7 +320,6 @@ class SubsumptiveTableOld:
 
         #self.row_wise = sp.csr_matrix(arr, dtype=bool)
         #self.col_wise = sp.csc_matrix(arr, dtype=bool)
-        self.shape = (arr.shape[0], arr.shape[0]) # type: ignore
 
     #@profile #type: ignore
     def fill_downward_cleave(self, fill: FillPointer) -> np.ndarray[Any, np.dtype[np.bool_]]:
@@ -359,7 +360,7 @@ class SubsumptiveTableOld:
         Returns
         -------
         np.ndarray
-            Downward Cleave
+            Upward Cleave
         """
         assert fill.idx < self.shape[1], str(fill.idx) + ", " + str(self.shape)
         out = np.zeros(bells(fill.size), dtype=np.bool_)
@@ -367,26 +368,65 @@ class SubsumptiveTableOld:
         return out
         #return self.col_wise[:bells(fill.size), fill.point] # type: ignore
 
-class SubsumptiveTable:
-    subsumptive_list: list[set[int]]
-    inverted_list: list[set[int]]
+class SubsumptiveTableSlow:
+    row_indexing_list: list[np.ndarray[Any, np.dtype[np.int32]]]
+    col_indexing_list: list[np.ndarray[Any, np.dtype[np.int32]]]
     shape: tuple[int, ...]
     def __init__(self, arr: np.ndarray):
-        self.subsumptive_list = [set((i,)) for i in range(arr.shape[0])]
-        self.inverted_list = [set((i,)) for i in range(arr.shape[0])]
+        self.shape = (arr.shape[0], arr.shape[0])
 
-        for i in range(arr.shape[0]):
+        subsumptive_list: list[set[int]] = [set((i,)) for i in range(self.shape[0])]
+        inverted_list: list[set[int]] = [set((i,)) for i in range(self.shape[0])]
+
+        for i in range(self.shape[0]):
             for point in _subsumed_points(arr[i]):
                 j = _fill_to_idx(point).idx
-                self.subsumptive_list[i].add(j)
-                #subsumptive_list[i].update(subsumptive_list[j])
-                self.inverted_list[j].add(i)
-                #for k in subsumptive_list[j]:
-                #    inverted_list[k].add(i)
+                subsumptive_list[i].add(j)
+                inverted_list[j].add(i)
+        
+        self.row_indexing_list = []
+        for i, s in enumerate(subsumptive_list):
+            self.row_indexing_list.append(np.array(sorted(s), dtype=np.int32))
 
-        self.shape = (arr.shape[0], arr.shape[0]) # type: ignore
+        self.col_indexing_list = []
+        for i, s in enumerate(inverted_list):
+            self.col_indexing_list.append(np.array(sorted(s), dtype=np.int32))
 
-    #@profile #type: ignore
+        #self.row_wise = sp.csr_matrix(arr, dtype=bool)
+        #self.col_wise = sp.csc_matrix(arr, dtype=bool)
+
+    @profile #type: ignore
+    def fill_downward_cleave_old(self, fill: FillPointer) -> np.ndarray[Any, np.dtype[np.bool_]]:
+        """Calculates a downward cleave at a point. 
+        This corresponds to finding out that point i is non-tautological so all fills that imply it are also non-tautological
+
+        Parameters
+        ----------
+        i : int
+            Cleave starting point
+        size : int
+            Size of cleave to return, number of variables in the point usually
+
+        Returns
+        -------
+        np.ndarray
+            Downward Cleave
+        """
+        assert fill.idx < self.shape[0], str(fill.idx) + ", " + str(self.shape)
+        size_limit = bells(fill.size)
+        out = np.zeros(size_limit, dtype=np.bool_)
+        queue: deque[int] = deque(self.col_indexing_list[fill.idx])
+        while len(queue)>0:
+            i: int = queue.popleft()
+            if i >= size_limit:
+                continue
+            if out[i]==0:
+                out[i] = 1
+                queue.extend(self.col_indexing_list[i])
+
+        return out
+    
+    @profile #type: ignore
     def fill_downward_cleave(self, fill: FillPointer) -> np.ndarray[Any, np.dtype[np.bool_]]:
         """Calculates a downward cleave at a point. 
         This corresponds to finding out that point i is non-tautological so all fills that imply it are also non-tautological
@@ -404,14 +444,37 @@ class SubsumptiveTable:
             Downward Cleave
         """
         assert fill.idx < self.shape[0], str(fill.idx) + ", " + str(self.shape)
-        out = np.zeros(bells(fill.size), dtype=np.bool_)
-        list_points = self.full_set_helper(self.inverted_list[fill.idx], self.inverted_list)
-        max_point: int = bells(fill.size)
-        list_points = [p for p in list_points if p < max_point]
-        out[list_points] = 1
-        return out
+        size_limit = bells(fill.size)
 
-    #@profile #type: ignore
+        #out = np.zeros(size_limit, dtype=np.bool_)
+        #out[self.col_indexing_list[fill.idx][self.col_indexing_list[fill.idx] < size_limit]] = 1
+        #for i in range(out.shape[0]):
+        #    if out[i] == 1:
+        #        out[self.col_indexing_list[i][self.col_indexing_list[i] < size_limit]] = 1
+
+        out = np.zeros(size_limit, dtype=np.bool_)
+        out[self.col_indexing_list[fill.idx][self.col_indexing_list[fill.idx] < size_limit]] = 1
+        checks = np.where(out==1)[0]
+        while len(checks) > 0:
+            checks = np.unique(np.concatenate([self.col_indexing_list[i][self.col_indexing_list[i] < size_limit][1:] for i in checks]))
+            out[checks] = 1
+
+        return out
+    
+    @profile #type: ignore
+    def fill_downward_cleave_carry(self, arr: np.ndarray[Any, np.dtype[np.bool_]], fill: FillPointer) -> None:
+        assert fill.idx < self.shape[0], str(fill.idx) + ", " + str(self.shape)
+        size_limit = bells(fill.size)
+        queue: deque[int] = deque(self.col_indexing_list[fill.idx])
+        while len(queue)>0:
+            i: int = queue.popleft()
+            if i >= size_limit:
+                continue
+            if arr[i]==0:
+                arr[i] = 1
+                queue.extend(self.col_indexing_list[i])
+
+    @profile #type: ignore
     def fill_upward_cleave(self, fill: FillPointer) -> np.ndarray[Any, np.dtype[np.bool_]]:
         """Calculates an upward cleave at a point. 
         This corresponds to finding out that point i is tautological so all fills that imply it are also tautological
@@ -426,26 +489,29 @@ class SubsumptiveTable:
         Returns
         -------
         np.ndarray
-            Downward Cleave
+            Upward Cleave
         """
         assert fill.idx < self.shape[1], str(fill.idx) + ", " + str(self.shape)
         out = np.zeros(bells(fill.size), dtype=np.bool_)
-        list_points = list(self.full_set_helper(self.subsumptive_list[fill.idx], self.subsumptive_list))
-        out[list_points] = 1
+        queue: deque[int] = deque(self.row_indexing_list[fill.idx])
+        while len(queue)>0:
+            i: int = queue.popleft()
+            if out[i]==0:
+                out[i] = 1
+                queue.extend(self.row_indexing_list[i])
+
         return out
 
-    @staticmethod
-    def full_set_helper(s, ref):
-        visited = set()
-        queue = set(s)
-
-        while queue:
-            c = queue.pop()
-            if c not in visited:
-                visited.add(c)
-                queue.update(ref[c] - visited)
-    
-        return visited
+    def two_way_dense(self, size=5):
+        d1 = np.zeros(self.shape, dtype=np.int16)
+        d2 = np.zeros(self.shape, dtype=np.int16)
+        for j in range(self.shape[0]):
+            c = fill_downward_cleave(FillPointer(j, size))
+            d1[:,j] = c
+        for i in range(self.shape[0]):
+            r = fill_upward_cleave(FillPointer(i, size))
+            d2[i,:] = r
+        return d1, d2
 
 
 _fill_table_subsumptive_table: SubsumptiveTable = SubsumptiveTable(np.zeros((0, 0)))
@@ -575,6 +641,9 @@ def fill_downward_cleave(fill: FillPointer) -> np.ndarray[Any, np.dtype[np.bool_
     """
     return _fill_table_subsumptive_table.fill_downward_cleave(fill)
 
+#def fill_downward_cleave_carry(arr: np.ndarray[Any, np.dtype[np.bool_]], fill: FillPointer) -> None:
+#    _fill_table_subsumptive_table.fill_downward_cleave_carry(arr, fill)
+
 def fill_upward_cleave(fill: FillPointer) -> np.ndarray[Any, np.dtype[np.bool_]]:
     """Calculates an upward cleave at a point. 
     This corresponds to finding out that point i is tautological so all fills that imply it are also tautological
@@ -593,7 +662,7 @@ def fill_upward_cleave(fill: FillPointer) -> np.ndarray[Any, np.dtype[np.bool_]]
     """
     return _fill_table_subsumptive_table.fill_upward_cleave(fill)
 
-#@profile # type: ignore
+@profile # type: ignore
 def fill_result_disassembly_application(evaluation: ModelArray, constants: Sequence[int], cleave_direction: Literal["Upward"] | Literal["Downward"]) -> CleavingMatrix:
     """Disassembles an evaluation into a CleavingMatrix.
     If the cleave direction is downward this CleaveMatrix is correct and corresponds to True where Tautological
@@ -625,6 +694,7 @@ def fill_result_disassembly_application(evaluation: ModelArray, constants: Seque
             if inverted_cleaver[fill.idx]==0:
                 assert fill.size == var_count, str(var_count) + " " + str(fill)
                 inverted_cleaver += fill_downward_cleave(fill)
+            #fill_downward_cleave_carry(inverted_cleaver, fill)
         cleavematrix.cleaves[constant_specifier] = np.logical_not(inverted_cleaver)
 
     if cleave_direction == "Upward":
@@ -632,7 +702,7 @@ def fill_result_disassembly_application(evaluation: ModelArray, constants: Seque
 
     return cleavematrix
 
-#@profile # type: ignore
+@profile # type: ignore
 def fill_disassembly_specified_fill_pairings(evaluation: ModelArray, constants: Sequence[int]) -> dict[tuple[int, ...], list[FillPointer]]:
     """Creates a dictionary of constant combinations and their associated False points in the evaluation
 

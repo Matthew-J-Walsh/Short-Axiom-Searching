@@ -19,7 +19,7 @@ class TreeForm:
     """References for all Operations in a particular order (will define iteration order, not nessisarily efficiency, and definantly not the total possibilities)"""
     constants: tuple[ConstantSpec, ...]
     """References for all Constants in a particular order (will define iteration order, not nessisarily efficiency, and definantly not the total possibilities)"""
-    prefix: PrefixSpec
+    prefix: PredicateSpec
     """Prefix operator"""
     _MAXIMUM_FULLY_CACHED_NODE_SIZE: int
     """Maximum size Node to make PsudeoNodes for"""
@@ -787,7 +787,7 @@ class TreeForm:
             while self.iterate(external_degeneracy):
                 yield self
         
-        #@profile # type: ignore
+        @profile # type: ignore
         def process(self, model_table: ModelTable, tptp_wrapper: TheoremProverWrapper, remaining_file_handler: Callable[[str], None], progress_tracker: ProgressTracker) -> tuple[int, int]:
             """Fully processes this Node in its current state (without iterating it), creating new countermodels using tptp as needed.
             Indeterminate expressions will be placed into the remaining file
@@ -862,7 +862,7 @@ class TreeForm:
             progress_tracker.formula = self.tptp()
             return sum(c.sum() for c in cleaver.cleaves.values()), sum(c.shape[0] for c in cleaver.cleaves.values())
 
-        #@profile # type: ignore
+        @profile # type: ignore
         def _process_cleaver_helper(self, cleaver: CleavingMatrix, model: Model, cleave_direction: Literal["Upward"] | Literal["Downward"]) -> None:
             """Helper function to calculate cleaves from a model
 
@@ -918,7 +918,7 @@ class TreeForm:
         progress_tracker : ProgressTracker
             Tool to track progress through the computation
         skip : int | str
-            Number of states to skip at the start. Useful for restarting after a keyboard iterrupt. Default 0
+            Number of states to skip at the start. Useful for restarting after a keyboard iterrupt or crash. Default 0
             If str, interperted as file, and will load the first line of the file (if it doesn't exist it creates the file with a first line 0)
             as the skip count and continuously update it
 
@@ -973,6 +973,7 @@ class TreeForm:
                         total_processed += new_processed
                     i += 1
                     skip = max(skip, i)
+                    progress_tracker.formula = state.tptp()
                     progress_tracker.progress = i
                     if isinstance(skip_value, TextIOWrapper):
                         skip_value.seek(0)

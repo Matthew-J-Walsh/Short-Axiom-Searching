@@ -1,19 +1,8 @@
-from types import NotImplementedType
 from Globals import *
 from ModelTools import *
 
-#counter_axiom = 'i(i(i(X,Y),i(o,Z)),i(U,i(i(Z,X),i(V,i(W,X)))))' #C1 old
-#counter_axiom = 'i(i(i(i(i(X,Y),i(Z,o)),U),V),i(i(V,X),i(Z,X)))' #C0?
-#counter_axiom = 'i(i(i(X,Y),i(Z,i(o,U))),i(i(U,X),i(Z,i(V,X))))'
-#counter_axiom = 'i(i(X,Y),i(i(Y,Z),i(X,Z)))' #C0 infinite transitivity
-#counter_axiom = 'i(i(i(X,o),i(Y,o)),i(Y,X))' #C0 L4
-#counter_axiom = 'i(X,i(Y,X))' #C0 L1
-#counter_axiom = 'd(n(d(n(d(X,Y)),n(Z))),n(d(n(d(n(V),V)),d(n(Z),X))))=Z' #DN single axiom DN-13345
-#counter_axiom = 'i(i(i(X,Y),i(o,Z)),i(U,i(i(Z,X),i(V,i(W,X)))))' #C1 old
-#counter_axiom = 'i(i(i(i(i(X,Y),i(Z,o)),U),V),i(i(V,X),i(Z,X)))' #C0?
-#counter_axiom = 'i(i(i(X,Y),i(Z,i(o,U))),i(i(U,X),i(Z,i(V,X))))'
-
-_VAMPIRE_MODUS_PONENS = "((t(X) & t(i(X,Y))) => t(Y))"
+#MODUS_PONENS_REASONING_RULE = "((t(X) & t(i(X,Y))) => t(Y))"
+#DISJUNCTIVE_SYLLOGISM_REASONING_RULE = "((t(X) & t(i(X,Y))) => t(Y))"
 
 class TheoremProverWrapper:
     """Class for a theorem proving wrapper. Called on expressions to run them in a theorem prover."""
@@ -21,12 +10,15 @@ class TheoremProverWrapper:
     """Location of executable file"""
     model_spec: ModelSpec
     """Model spec in use"""
+    template: str
+    """Template header to use"""
     equational: bool
     """Is the model equational"""
 
-    def __init__(self, executable_location: str, model_spec: ModelSpec, equational: bool = False):
+    def __init__(self, executable_location: str, model_spec: ModelSpec, template: str, equational: bool = False):
         self.excecutable_location = executable_location
         self.model_spec = model_spec
+        self.template = template
         self.equational = equational
         
     def _fof_formula_to_fof_line(self, formula: str, name: str, type: Literal["axiom"] | Literal["conjecture"]) -> str:
@@ -127,8 +119,6 @@ class TheoremProverWrapper:
         print(str(len(formulas))+" formulas remaing after processing.")
         
 class VampireWrapper(TheoremProverWrapper):
-    """Wrapper for vampire theorem prover"""
-    counter_modeling_formula_sets: list[list[str]]
     """Counter modeling formulas to use"""
     counter_model_folder: str
     """Location to put new counter models"""
@@ -137,10 +127,9 @@ class VampireWrapper(TheoremProverWrapper):
     verification: bool
     """Should we verify countermodels before returning"""
 
-    def __init__(self, executable_location: str, counter_modeling_formula_sets: list[list[str]], counter_model_folder: str, model_spec: ModelSpec, equational: bool = False,
+    def __init__(self, executable_location: str, template: str, counter_model_folder: str, model_spec: ModelSpec, equational: bool = False,
                  optional_args: dict[str, str] | None = None, optional_flags: list[str] | None = None, verify_models: bool = False):
-        super().__init__(executable_location, model_spec, equational)
-        self.counter_modeling_formula_sets = counter_modeling_formula_sets
+        super().__init__(executable_location, model_spec, template, equational)
         self.counter_model_folder = counter_model_folder
 
         baseline_args = {
@@ -171,7 +160,7 @@ class VampireWrapper(TheoremProverWrapper):
 
         self.verification = verify_models
 
-    def _generate_tptp_input_file(self, tptp_form: str, counter_model_set: list[str]) -> str:
+    def _generate_tptp_input_file(self, tptp_form: str) -> str:
         if not os.path.exists("input_tmp"):
             os.makedirs("input_tmp")
 
@@ -180,14 +169,11 @@ class VampireWrapper(TheoremProverWrapper):
             file_name = file_name.replace(i, '')
         file_name += '.p'
 
-        contents: str = ""
-        if not self.equational:
-            contents += self._fof_formula_to_fof_line(_VAMPIRE_MODUS_PONENS, "mp", "axiom")
+        contents: str = self.template
         contents += self._fof_formula_to_fof_line(tptp_form, "cand", "axiom")
         if not self.equational:
             contents += ''.join(self._fof_formula_to_fof_line(("" if cons.predicate_orientation else "~")+self.model_spec.prefix.tptp_symbol+"("+cons.tptp_symbol+")", "constant"+str(i), "axiom") 
                                 for i, cons in enumerate(self.model_spec.constants) if not cons.predicate_orientation is None)
-        contents += self._fof_formula_to_fof_line('&'.join(counter_model_set), "counter", "conjecture")
 
         with open(file_name, 'w') as input_file:
             input_file.write(contents)
@@ -243,33 +229,31 @@ class VampireWrapper(TheoremProverWrapper):
             True if unmodeled but should be removed (raises errors if used outside hammering)
             Model if countermodeled
         """
-        for counter_formula_set in self.counter_modeling_formula_sets:
-            input_file_name: str = self._generate_tptp_input_file(tptp_form, counter_formula_set)
-            for fmb_start_size in [2]:#, 6, 7, 8]:
-                result: str = subprocess.run(self.command + ["--fmb_start_size", str(fmb_start_size)] + [input_file_name], capture_output=True, text=True).stdout
+        input_file_name: str = self._generate_tptp_input_file(tptp_form)
+        for fmb_start_size in [2]:#, 6, 7, 8]:
+            result: str = subprocess.run(self.command + ["--fmb_start_size", str(fmb_start_size)] + [input_file_name], capture_output=True, text=True).stdout
 
-                if not "Finite Model Found!" in result:
-                    #print(result)
-                    #raise ValueError(result)
-                    #os.remove(input_file_name)
-                    continue
-                else:
-                    model: Model = Model(self.model_spec, model_filename = self.save_countermodel(result))
-                    if self.verification:
-                        assert model(tptp_form), str(model)+"\n"+tptp_form
-                        assert not all(model(counter_formula) for counter_formula in counter_formula_set), str(model)+"\n"+str(counter_formula_set)
+            if not "Finite Model Found!" in result:
+                #print(result)
+                #raise ValueError(result)
+                #os.remove(input_file_name)
+                continue
+            else:
+                model: Model = Model(self.model_spec, model_filename = self.save_countermodel(result))
+                if self.verification:
+                    assert model(tptp_form), str(model)+"\n"+tptp_form
 
-                    os.remove(input_file_name)
-                    return model
+                os.remove(input_file_name)
+                return model
                 
         return False
         
 class Prover9Wrapper(TheoremProverWrapper):
     preamble: str
 
-    def __init__(self, executable_location: str, model_spec: ModelSpec, equational: bool = False):
+    def __init__(self, executable_location: str, model_spec: ModelSpec, template: str, equational: bool = False):
         self.preamble = "set(auto).\nset(prolog_style_variables).\nassign(max_weight,48).\nassign(max_vars,8).\nset(restrict_denials).\nassign(max_given,300).\n\nformulas(usable).\ni(i(c1,c2),c1) != c1.\nend_of_list."
-        super().__init__(executable_location, model_spec, equational)
+        super().__init__(executable_location, model_spec, template, equational)
 
     def _generate_prover9_input_file(self, tptp_form: str) -> str:
         if not os.path.exists("input_tmp"):

@@ -3,7 +3,7 @@ from __future__ import annotations
 from Globals import *
 from FillTools import *
 
-def _get_generated_prefix_value(prefix: PrefixSpec, model: Model) -> np.ndarray:
+def _get_generated_prefix_value(prefix: PredicateSpec, model: Model) -> np.ndarray:
     """Generates specific prefixes', with fixed values, default tables that are model dependent.
     Currently supported: Equality "="
 
@@ -258,7 +258,7 @@ class Model():
     """    
     order: int
     """Size of model"""
-    prefix: PrefixSpec
+    prefix: PredicateSpec
     """Spec of the prefix operation in the model"""
     prefix_definition: np.ndarray
     """Definition of the prefix operation in the model"""
@@ -267,12 +267,12 @@ class Model():
     constant_definitions: dict[ConstantSpec, int]
     """Definition of each of the constants in the model"""
 
-    def __init__(self, spec: ModelSpec, operation_definitions: dict[OperationSpec | PrefixSpec, np.ndarray] | None = None, 
+    def __init__(self, spec: ModelSpec, operation_definitions: dict[OperationSpec | PredicateSpec, np.ndarray] | None = None, 
                  constant_defnitions: dict[ConstantSpec, int] | None = None, model_filename: str | None = None) -> None:
         self.prefix = spec.prefix
         if not operation_definitions is None:
             self.operation_definitions = {op: arr for op, arr in operation_definitions.items() if isinstance(op, OperationSpec)}
-            self.prefix_definition = [arr for op, arr in operation_definitions.items() if isinstance(op, PrefixSpec)][0]
+            self.prefix_definition = [arr for op, arr in operation_definitions.items() if isinstance(op, PredicateSpec)][0]
             if not constant_defnitions is None:
                 self.constant_definitions = constant_defnitions
             else:
@@ -300,7 +300,7 @@ class Model():
             else:
                 self.prefix_definition = spec.prefix.default_table
 
-    def calculate(self, op: OperationSpec | PrefixSpec, output_size: int, inputs: tuple[tuple[ModelArray, DimensionalReference], ...]) -> ModelArray:
+    def calculate(self, op: OperationSpec | PredicateSpec, output_size: int, inputs: tuple[tuple[ModelArray, DimensionalReference], ...]) -> ModelArray:
         """Calculates the result table of an operation
 
         Parameters
@@ -324,7 +324,7 @@ class Model():
         assert out.ndim == output_size
         return out
 
-    def _get_values(self, tptp_form: str) -> list[PrefixSpec | OperationSpec | ConstantSpec | int]:
+    def _get_values(self, tptp_form: str) -> list[PredicateSpec | OperationSpec | ConstantSpec | int]:
         """Gets the operations constants and variables making up a expression
 
         Parameters
@@ -342,7 +342,7 @@ class Model():
         if '=' in stripped: #TODO: PLEASE FIX ME THIS IS SO BAD
             stripped = "=" + stripped.replace("=", '')
 
-        out: list[PrefixSpec | OperationSpec | ConstantSpec | int] = []
+        out: list[PredicateSpec | OperationSpec | ConstantSpec | int] = []
         var_table: dict[str, int] = {}
         i = 0
         for c in stripped:
@@ -384,9 +384,9 @@ class Model():
         list[CompiledElement | int | None]
             A compiled version for easy calculation
         """        
-        values: list[PrefixSpec | OperationSpec | ConstantSpec | int] = self._get_values(tptp_form)
+        values: list[PredicateSpec | OperationSpec | ConstantSpec | int] = self._get_values(tptp_form)
         try:
-            assert isinstance(values[0], PrefixSpec), "Un-prefixed Expression" 
+            assert isinstance(values[0], PredicateSpec), "Un-prefixed Expression" 
             assert values.count(values[0])==1, "Prefix must be unique"
         except:
             print(tptp_form)
@@ -398,8 +398,8 @@ class Model():
         compiled: list[CompiledElement | int | None] = [None] * var_count + [self.constant_definitions[c] for c in cons_list] # type: ignore
 
         for i in range(1, len(values)):
-            value: PrefixSpec | OperationSpec | ConstantSpec | int = values[i]
-            if isinstance(value, OperationSpec) or isinstance(value, PrefixSpec):
+            value: PredicateSpec | OperationSpec | ConstantSpec | int = values[i]
+            if isinstance(value, OperationSpec) or isinstance(value, PredicateSpec):
                 function_stack.append(FunctionStackElement(value, [value.arity], []))
             else:
                 if isinstance(value, ConstantSpec):
@@ -541,7 +541,7 @@ class Model():
         else:
             raise ValueError
         
-    def apply_function(self, op: OperationSpec | PrefixSpec, *arr: ModelArray) -> int | ModelArray:
+    def apply_function(self, op: OperationSpec | PredicateSpec, *arr: ModelArray) -> int | ModelArray:
         """Applies an function from this model to an array
 
         Parameters
@@ -561,9 +561,6 @@ class Model():
         else:
             return self._apply_function(self.prefix_definition, *arr)
         
-CN_STANDARD_MODEL = Model(CN_SPEC)
-C0_STANDARD_MODEL = Model(C0_SPEC)
-C1_STANDARD_MODEL = Model(C1_SPEC)
 
 class ModelTable():
     """Table of counter-models with 1 target model. 
@@ -650,26 +647,21 @@ class ModelTable():
         except:
             raise RuntimeError(tptp_form)
         
-    def verify_counter_model_sets(self, counter_modeling_formula_sets: list[list[str]]) -> None:
-        """Checks if some sets of counter modeling formulas actually work with this model table.
-        This means that all elements are tautological, and for all countermodels in this model table
-        atleast 1 formula is non-tautological.
+    def verify_known_formulas(self, known_formulas: list[str]) -> None:
+        """Checks if that known tautologies are evaluated as such.
 
         Parameters
         ----------
-        counter_modeling_formula_sets : list[list[str]]
-            _description_
+        known_formulas : list[list[str]]
+            List of known formulas
         """        
-        for counter_modeling_formula_set in counter_modeling_formula_sets:
-            for formula in counter_modeling_formula_set:
-                assert self.target_model(formula)
-        for counter_model in self.counter_models:
-            valid_cm = False
-            for counter_modeling_formula_set in counter_modeling_formula_sets:
-                for formula in counter_modeling_formula_set:
-                    if not counter_model(formula):
-                        valid_cm = True
-            assert valid_cm
+        for formula in known_formulas:
+            assert self.target_model(formula)
+        #for counter_model in self.counter_models:
+        #    for formula in known_formulas:
+        #        if not counter_model(formula):
+        #            valid_cm = True
+        #    assert valid_cm
     
     def counter_models_size_split(self, size: int) -> tuple[Iterable[Model], Iterable[Model]]:
         """Returns the counter models below and equal to or above a specific size

@@ -1,0 +1,39 @@
+{
+    "name": "HADN",
+    "counter_modeling_formulas": [
+        "t(o(n(o(X,X)),X))",
+        "t(o(n(X),o(X,Y)))",
+        "t(o(n(o(X,Y)),o(Y,X)))",
+        "t(o(n(o(n(X),Y)),o(n(o(Z,X)),o(Z,Y))))"
+    ],
+    "vampire_template": [
+        "fof(ds,axiom,![X,Y]: ((t(X) & t(o(n(X),Y))) => t(Y))).",
+        "fof(known,conjecture,![X,Y,Z]: t(o(n(o(X,X)),X)) & t(o(n(X),o(X,Y))) & t(o(n(o(X,Y)),o(Y,X))) & t(o(n(o(n(X),Y)),o(n(o(Z,X)),o(Z,Y)))))."
+    ],
+    "prover9_template": [
+
+    ],
+    "predicate": {
+        "symbol": "T", 
+        "tptp_symbol": "t", 
+        "arity": 1, 
+        "default_table": [false, true],
+        "formation_style": "Polish",
+        "mirrored": false
+    },
+    "operators": [
+        {
+            "symbol": "D", 
+            "tptp_symbol": "o", 
+            "arity": 2, 
+            "default_table": [[0, 1], [1, 1]]
+        },
+        {
+            "symbol": "N", 
+            "tptp_symbol": "n", 
+            "arity": 1, 
+            "default_table": [1, 0]
+        }
+    ],
+    "constants": []
+}

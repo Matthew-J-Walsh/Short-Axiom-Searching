@@ -1,0 +1,37 @@
+{
+    "name": "C0",
+    "counter_modeling_formulas": [
+        "t(i(i(i(i(i(X,Y),i(Z,f)),U),V),i(i(V,X),i(Z,X))))"
+    ],
+    "vampire_template": [
+        "fof(mp,axiom,![X,Y]: ((t(X) & t(i(X,Y))) => t(Y))).",
+        "fof(known,conjecture,![X,Y,Z,U,V]: t(i(i(i(i(i(X,Y),i(Z,f)),U),V),i(i(V,X),i(Z,X)))))."
+    ],
+    "prover9_template": [
+
+    ],
+    "predicate": {
+        "symbol": "T", 
+        "tptp_symbol": "t", 
+        "arity": 1, 
+        "default_table": [false, true],
+        "formation_style": "Polish",
+        "mirrored": false
+    },
+    "operators": [
+        {
+            "symbol": "C", 
+            "tptp_symbol": "i", 
+            "arity": 2, 
+            "default_table": [[1, 1], [0, 1]]
+        }
+    ],
+    "constants": [
+        {
+            "symbol": "F",
+            "tptp_symbol": "f",
+            "default_value": 0,
+            "predicate_orientation": false
+        }
+    ]
+}

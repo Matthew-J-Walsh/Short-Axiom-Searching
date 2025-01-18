@@ -1,0 +1,30 @@
+{
+    "name": "BAC",
+    "counter_modeling_formulas": [
+        "i(i(P,Q),P)=P",
+        "i(i(P,Q),i(R,Q))=i(i(Q,P),i(R,P))"
+    ],
+    "vampire_template": [
+        "fof(known,conjecture,![P,Q,R]: (i(i(P,Q),P)=P) & (i(i(P,Q),i(R,Q))=i(i(Q,P),i(R,P))))."
+    ],
+    "prover9_template": [
+
+    ],
+    "predicate": {
+        "symbol": "=", 
+        "tptp_symbol": "=", 
+        "arity": 2, 
+        "default_table": null,
+        "formation_style": "Infix",
+        "mirrored": true
+    },
+    "operators": [
+        {
+            "symbol": "C", 
+            "tptp_symbol": "i", 
+            "arity": 2, 
+            "default_table": [[1, 1], [0, 1]]
+        }
+    ],
+    "constants": []
+}
