@@ -12,14 +12,14 @@ class TheoremProverWrapper:
     """Model spec in use"""
     template: str
     """Template header to use"""
-    equational: bool
-    """Is the model equational"""
+    remove_temp_files: bool
+    """Should input files be removed"""
 
-    def __init__(self, executable_location: str, model_spec: ModelSpec, template: str, equational: bool = False):
+    def __init__(self, executable_location: str, model_spec: ModelSpec, template: str, remove_temp_files: bool = True):
         self.excecutable_location = executable_location
         self.model_spec = model_spec
         self.template = template
-        self.equational = equational
+        self.remove_temp_files = remove_temp_files
         
     def _fof_formula_to_fof_line(self, formula: str, name: str, type: Literal["axiom"] | Literal["conjecture"]) -> str:
         """Takes a formula and makes the appropriate single line
@@ -129,9 +129,9 @@ class VampireWrapper(TheoremProverWrapper):
     verification: bool
     """Should we verify countermodels before returning"""
 
-    def __init__(self, executable_location: str, template: str, counter_model_folder: str, model_spec: ModelSpec, equational: bool = False,
-                 optional_args: dict[str, str] | None = None, optional_flags: list[str] | None = None, verify_models: bool = False):
-        super().__init__(executable_location, model_spec, template, equational)
+    def __init__(self, executable_location: str, template: str, counter_model_folder: str, model_spec: ModelSpec,
+                 optional_args: dict[str, str] | None = None, optional_flags: list[str] | None = None, verify_models: bool = False, remove_temp_files: bool = True):
+        super().__init__(executable_location, model_spec, template, remove_temp_files)
         self.counter_model_folder = counter_model_folder
 
         baseline_args = {
@@ -185,9 +185,9 @@ class VampireWrapper(TheoremProverWrapper):
 
         contents: str = self.template
         contents += self._fof_formula_to_fof_line(tptp_form, "cand", "axiom")
-        if not self.equational:
-            contents += ''.join(self._fof_formula_to_fof_line(("" if cons.predicate_orientation else "~")+self.model_spec.prefix.tptp_symbol+"("+cons.tptp_symbol+")", "constant"+str(i), "axiom") 
-                                for i, cons in enumerate(self.model_spec.constants) if not cons.predicate_orientation is None)
+        #if not self.equational:
+        #    contents += ''.join(self._fof_formula_to_fof_line(("" if cons.predicate_orientation else "~")+self.model_spec.prefix.tptp_symbol+"("+cons.tptp_symbol+")", "constant"+str(i), "axiom") 
+        #                        for i, cons in enumerate(self.model_spec.constants) if not cons.predicate_orientation is None)
 
         with open(file_name, 'w') as input_file:
             input_file.write(contents)
@@ -248,25 +248,27 @@ class VampireWrapper(TheoremProverWrapper):
             result: str = subprocess.run(self.command + ["--fmb_start_size", str(fmb_start_size)] + [input_file_name], capture_output=True, text=True).stdout
 
             if not "Finite Model Found!" in result:
-                #print(result)
-                #raise ValueError(result)
-                #os.remove(input_file_name)
+                if "Failed with" in result:
+                    raise ValueError(result)
+                if self.remove_temp_files:
+                    os.remove(input_file_name)
                 continue
             else:
                 model: Model = Model(self.model_spec, model_filename = self.save_countermodel(result))
                 if self.verification:
                     assert model(tptp_form), str(model)+"\n"+tptp_form
 
-                #os.remove(input_file_name)
+                if self.remove_temp_files:
+                    os.remove(input_file_name)
                 return model
                 
         return False
         
 class Prover9Wrapper(TheoremProverWrapper):
     """Wrapper for the Prover9 theorem prover"""    
-    def __init__(self, executable_location: str, model_spec: ModelSpec, template: str, equational: bool = False):
+    def __init__(self, executable_location: str, model_spec: ModelSpec, template: str, remove_temp_files: bool = True):
         template = "set(auto).\nset(prolog_style_variables).\nassign(max_weight,48).\nassign(max_vars,8).\nset(restrict_denials).\nassign(max_given,300).\n\nformulas(usable).\ni(i(c1,c2),c1) != c1.\nend_of_list."
-        super().__init__(executable_location, model_spec, template, equational)
+        super().__init__(executable_location, model_spec, template, remove_temp_files)
 
     def _generate_prover9_input_file(self, tptp_form: str) -> str:
         """Generates a input file for prover9 for a candidate

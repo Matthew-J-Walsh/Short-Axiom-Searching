@@ -1,11 +1,12 @@
 {
-    "name": "C1",
+    "name": "CT",
     "counter_modeling_formulas": [
         "t(i(i(i(X,Y),i(o,Z)),i(U,i(i(Z,X),i(V,i(W,X))))))"
     ],
     "vampire_template": [
         "fof(mp,axiom,![X,Y]: ((t(X) & t(i(X,Y))) => t(Y))).",
-        "fof(known,conjecture,![X,Y,Z,U,V]: t(i(i(i(X,Y),i(o,Z)),i(U,i(i(Z,X),i(V,i(W,X)))))))."
+        "fof(known,conjecture,![X,Y,Z,U,V]: t(i(i(i(X,Y),i(o,Z)),i(U,i(i(Z,X),i(V,i(W,X))))))).",
+        "fof(const,axiom,![]: t(o))."
     ],
     "prover9_template": [
 

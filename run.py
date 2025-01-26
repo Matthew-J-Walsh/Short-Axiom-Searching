@@ -45,10 +45,12 @@ cache_size: int = args.cache_size
 vampire_executable_file_path = os.path.join("theorem_provers", "vampire")
 prover9_executable_file_path = os.path.join("theorem_provers", "prover9")
 unsolved_folder = os.path.join("Remaining",name)
+unsolved_file = os.path.join(unsolved_folder, name+str(target_length)+"Rem.txt")
 counter_model_folder = os.path.join("CounterModels",name)
 save_file_base = os.path.join("partial_run_saves", name)
 reset_progress = args.reset_progress
 full_verification = args.full_verification
+remove_temp_files = not args.retain_input_files
 
 tree_form = TreeForm(spec, cache_size)
 
@@ -77,28 +79,26 @@ if not os.path.exists(unsolved_folder):
 
 match run_type:
     case "Standard":
-        vampire_wrapper: TheoremProverWrapper = VampireWrapper(vampire_executable_file_path, vampire_template, counter_model_folder, Models.spec, verify_models=True, equational=True)
+        vampire_wrapper: TheoremProverWrapper = VampireWrapper(vampire_executable_file_path, vampire_template, counter_model_folder, Models.spec, verify_models=True, remove_temp_files=remove_temp_files)
 
         print("Starting length: "+str(target_length))
         start_time = time.time()
         progress_tracker = ProgressTracker(tree_form.form_count(target_length))
         save_file = save_file_base+str(target_length)+".txt"
-        unsolved_count, processed_count = tree_form.process_tree(target_length, Models, vampire_wrapper, os.path.join(unsolved_folder, name+str(target_length)+"Rem.txt"), progress_tracker, save_file, reset_progress, full_verification)
+        unsolved_count, processed_count = tree_form.process_tree(target_length, Models, vampire_wrapper, unsolved_file, progress_tracker, save_file, reset_progress, full_verification)
 
         print("Processed "+str(processed_count)+" formulas, Was unable to solve: "+str(unsolved_count))
     
         print("Execution time: "+str(time.time() - start_time))
     case "Hammer":
-        vampire_wrapper: TheoremProverWrapper = VampireWrapper(vampire_executable_file_path, vampire_template, counter_model_folder, Models.spec, verify_models=True, equational=True, optional_args={"-t": "2"})
+        vampire_wrapper: TheoremProverWrapper = VampireWrapper(vampire_executable_file_path, vampire_template, counter_model_folder, Models.spec, verify_models=True, optional_args={"-t": "2"}, remove_temp_files=remove_temp_files)
         
         print("Starting length: "+str(target_length))
-        unsolved_file = os.path.join(unsolved_folder, "BAC"+str(target_length)+"Rem.txt")
         vampire_wrapper.hammer(unsolved_file)
     case "Prover9Hammer":
-        prover9_wrapper: TheoremProverWrapper = Prover9Wrapper(prover9_executable_file_path, Models.spec, prover9_template, equational=True)
+        prover9_wrapper: TheoremProverWrapper = Prover9Wrapper(prover9_executable_file_path, Models.spec, prover9_template, remove_temp_files=remove_temp_files)
 
         print("Starting length: "+str(target_length))
-        unsolved_file = os.path.join(unsolved_folder, name+str(target_length)+"Rem.txt")
         new_unsolved_file = os.path.join(unsolved_folder, name+str(target_length)+"Rem-fastpass.txt")
         prover9_wrapper.hammer(unsolved_file, new_unsolved_file)
 
