@@ -19,8 +19,8 @@ class TreeForm:
     """References for all Operations in a particular order (will define iteration order, not nessisarily efficiency, and definantly not the total possibilities)"""
     constants: tuple[ConstantSpec, ...]
     """References for all Constants in a particular order (will define iteration order, not nessisarily efficiency, and definantly not the total possibilities)"""
-    prefix: PredicateSpec
-    """Prefix operator"""
+    predicate: PredicateSpec
+    """Predicate operator"""
     _MAXIMUM_FULLY_CACHED_NODE_SIZE: int
     """Maximum size Node to make PsudeoNodes for"""
     _PSUDEO_NODE_CACHE: dict[int, tuple[TreeForm.Node, ...]]
@@ -31,7 +31,7 @@ class TreeForm:
     def __init__(self, spec: ModelSpec, MAXIMUM_FULLY_CACHED_NODE_SIZE: int, RESONABLE_MAXIMUM_FULL_MODELING_SIZE: int = 3) -> None:
         self.operations = tuple([ref for ref in spec.operators])
         self.constants = tuple([ref for ref in spec.constants])
-        self.prefix = spec.prefix
+        self.predicate = spec.prefix
         self._MAXIMUM_FULLY_CACHED_NODE_SIZE = MAXIMUM_FULLY_CACHED_NODE_SIZE
         self._PSUDEO_NODE_CACHE = {}
         self._RESONABLE_MAXIMUM_FULL_MODELING_SIZE = RESONABLE_MAXIMUM_FULL_MODELING_SIZE
@@ -68,7 +68,7 @@ class TreeForm:
         raise RuntimeError
         
     @staticmethod
-    def _node_size_combos(remaining_slots: int, remaining_size: int) -> Iterable[tuple[int, ...]]:
+    def _node_size_combos(remaining_slots: int, remaining_size: int, associative: bool = False) -> Iterable[tuple[int, ...]]:
         """Helper function for valid node size computation
 
         Parameters
@@ -77,6 +77,8 @@ class TreeForm:
             Remaining number of node size groupings
         remaining_size : int
             Remaining number of subnodes to place into groupings
+        associative : bool, optional
+            Is the function associative, if so only allow decrementing combos. Assumed to be False
 
         Yields
         ------
@@ -87,8 +89,19 @@ class TreeForm:
             yield (remaining_size, )
         else:
             for i in range(1, remaining_size + 1 - remaining_slots + 1):
-                for comb in TreeForm._node_size_combos(remaining_slots - 1, remaining_size - i):
-                    yield (i,) + comb
+                for comb in TreeForm._node_size_combos(remaining_slots - 1, remaining_size - i, associative):
+                    if not associative or i >= comb[0]:
+                        yield (i,) + comb
+
+    def valid_node_size_combos(self, remaining_slots: int, remaining_size: int, associative: bool = False) -> Iterable[tuple[int, ...]]:
+        for comb in self._node_size_combos(remaining_slots, remaining_size, associative):
+            valid = True
+            for s in comb:
+                if not self._valid_node_size(s):
+                    valid = False
+                    break
+            if valid:
+                yield comb
     
     @functools.cache
     def _valid_node_size(self, size: int) -> bool:
@@ -108,7 +121,7 @@ class TreeForm:
             return True
         
         for op in self.operations:
-            for comb in self._node_size_combos(op.arity, size - 1):
+            for comb in self._node_size_combos(op.arity, size - 1, op.associative):
                 valid = True
                 for s in comb:
                     if not self._valid_node_size(s):
@@ -126,6 +139,8 @@ class TreeForm:
         ----------
         size : int
             Size of node to make
+        external_degeneracy : CountArray | None, Optional
+            Amount of each symbol in external elements, used to prevent degenerate formulas (formulas missing atleast one symbol of the logic)
 
         Returns
         -------
@@ -194,21 +209,18 @@ class TreeForm:
                 self._initilize(external_degeneracy)
 
         def _reset_caches(self) -> None:
-            """Clears the caches
-            """            
+            """Clears the caches"""            
             self._cache = {}
             self._count_cache = None
             self._tptp_cache = None
         
         def freeze(self) -> None:
-            """Freezes this node, will throw an error if it is iterated
-            """            
+            """Freezes this node, will throw an error if it is iterated"""            
             self._frozen = True
 
         @property
         def _current_value(self) -> OperationSpec | None:
-            """The current Operation, Constant, or Variable (None)
-            """            
+            """The current Operation, Constant, or Variable (None)"""            
             return self.tree.operations[self._value] if self._value != len(self.tree.operations) else None
 
         def _initilize(self, external_degeneracy: CountArray | None = None) -> None:
@@ -216,8 +228,8 @@ class TreeForm:
 
             Parameters
             ----------
-            external_degeneracy : CountArray | None, optional
-                The external counts of each possible node value to avoid degenerate trees, by default None
+            external_degeneracy : CountArray | None, Optional
+                Amount of each symbol in external elements, used to prevent degenerate formulas (formulas missing atleast one symbol of the logic)
             """                      
             self._value = -1
             self._reset_caches()
@@ -228,8 +240,8 @@ class TreeForm:
 
             Parameters
             ----------
-            external_degeneracy : CountArray | None, optional
-                The external counts of each possible node value to avoid degenerate trees, by default None
+            external_degeneracy : CountArray | None, Optional
+                Amount of each symbol in external elements, used to prevent degenerate formulas (formulas missing atleast one symbol of the logic)
 
             Returns
             -------
@@ -251,8 +263,8 @@ class TreeForm:
 
             Parameters
             ----------
-            external_degeneracy : CountArray | None, optional
-                The external counts of each possible node value to avoid degenerate trees, by default None
+            external_degeneracy : CountArray | None, Optional
+                Amount of each symbol in external elements, used to prevent degenerate formulas (formulas missing atleast one symbol of the logic)
             """            
             self._reset_caches()
             op: OperationSpec | ConstantSpec | None = self._current_value
@@ -310,13 +322,17 @@ class TreeForm:
             Parameters
             ----------
             external_degeneracy : CountArray
-                External counts of each lexographical elements
+                Amount of each symbol in external elements, used to prevent degenerate formulas (formulas missing atleast one symbol of the logic)
 
             Returns
             -------
             bool
                 If the tree will be degenerate or not
-            """            
+            """           
+            if isinstance(self, TreeForm.TopNode) and self.tree.predicate.associative and self.branches[0].size < self.branches[1].size:
+                return True
+            if self.tree.operations[self._value].associative and any(self.branches[i].size < self.branches[i + 1].size for i in range(len(self.branches) - 1)):
+                return True
             return bool((external_degeneracy + self.counts <= 0).any())
         
         def _iterate_inner(self, external_degeneracy: CountArray) -> bool:
@@ -325,7 +341,7 @@ class TreeForm:
             Parameters
             ----------
             external_degeneracy : CountArray
-                External counts of each lexographical elements
+                Amount of each symbol in external elements, used to prevent degenerate formulas (formulas missing atleast one symbol of the logic)
 
             Returns
             -------
@@ -353,16 +369,12 @@ class TreeForm:
                     #new_size = self.tree._next_valid_node_size(self.branches[i+1].size)
                     #diff = self.branches[i+1].size - new_size
                     self.branches[i+1] = self.tree.new_node(self.tree._next_valid_node_size(self.branches[i+1].size))
-                    self.branches[0] = self.tree.new_node(self.size - (0 if isinstance(self, TreeForm.TopNode) else 1) - i - sum(b.size for b in self.branches[i+1:]))
+                    self.branches[0] = self.tree.new_node(self.size - 1 - i - sum(b.size for b in self.branches[i+1:]))
                     for j in range(1, i+1):
                         #print(j)
                         self.branches[j] = self.tree.new_node(1)
-                    assert self.size - (0 if isinstance(self, TreeForm.TopNode) else 1) - sum(b.size for b in self.branches) == 0, [b.size for b in self.branches]
+                    assert self.size - 1 - sum(b.size for b in self.branches) == 0, [b.size for b in self.branches]
                     self._reset_caches()
-                    if isinstance(self, TreeForm.TopNode) and self.tree.prefix.mirrored and self.branches[0].size < self.branches[1].size: 
-                        assert self.tree.prefix.arity==2, "Mirrored and not arity 2?"
-                        #we are iterating a mirrored operation, this means that there is no benefit to something like len-3 = len-4, as we already covered those formulae in len-4 = len-3
-                        return False
                     return True
             
             #Once unable to move element count try to iterate value
@@ -383,7 +395,7 @@ class TreeForm:
             Parameters
             ----------
             external_degeneracy : CountArray
-                External counts of each lexographical elements
+                Amount of each symbol in external elements, used to prevent degenerate formulas (formulas missing atleast one symbol of the logic)
 
             Returns
             -------
@@ -399,8 +411,7 @@ class TreeForm:
                 
         @property
         def counts(self) -> CountArray:
-            """Count of each lexographical element in this node and all branches
-            """            
+            """Count of each lexographical element in this node and all branches"""            
             if self._count_cache is None:
                 #typing hates this completely valid code
                 if len(self.branches)==0:
@@ -427,14 +438,12 @@ class TreeForm:
         
         @property
         def var_count(self) -> int:
-            """Number of variable slots in this node
-            """            
+            """Number of variable slots in this node"""            
             return self.counts[-1]
         
         @property
         def branch_var_counts(self) -> tuple[int, ...]:
-            """Variable counts of each branch
-            """            
+            """Variable counts of each branch"""            
             return tuple([b.var_count for b in self.branches])
 
         def __str__(self) -> str:
@@ -525,8 +534,7 @@ class TreeForm:
                 yield self
 
     class PsudeoNode(Node):
-        """A PsudeoNode acts like a Node but actually just indexes a known list of every possible node of that length 
-        """        
+        """A PsudeoNode acts like a Node but actually just indexes a known list of every possible node of that length"""        
         point: int
         """The current point in the list of possible Nodes that this Node is using"""
         cache: tuple[TreeForm.Node, ...]
@@ -558,6 +566,26 @@ class TreeForm:
                 Result array
             """            
             return self.cache[self.point].calculate(model, fill)
+
+        def _is_degenerate(self, external_degeneracy: CountArray) -> bool:
+            """Determines if this Node's current value will cause the entire Tree to be degenerate, 
+            lacking atleast one lexographical element
+
+            Parameters
+            ----------
+            external_degeneracy : CountArray
+                Amount of each symbol in external elements, used to prevent degenerate formulas (formulas missing atleast one symbol of the logic)
+
+            Returns
+            -------
+            bool
+                If the tree will be degenerate or not
+            """           
+            if isinstance(self, TreeForm.TopNode) and self.tree.predicate.associative and self.cache[self.point].branches[0].size < self.cache[self.point].branches[1].size:
+                return True
+            if self.tree.operations[self.cache[self.point]._value].associative and any(self.cache[self.point].branches[i].size < self.cache[self.point].branches[i + 1].size for i in range(len(self.cache[self.point].branches) - 1)):
+                return True
+            return bool((external_degeneracy + self.counts <= 0).any())
 
         def iterate(self, external_degeneracy: CountArray) -> bool:
             """Iterates self until its non-degenerate (if possible)
@@ -658,7 +686,10 @@ class TreeForm:
         def __init__(self, tree: TreeForm, size: int, external_degeneracy: CountArray | None = None) -> None:
             self.tree = tree
             self.size = size
-            self.branches = [self.tree.new_node(size + 1 - self.tree.prefix.arity, external_degeneracy)] + [self.tree.new_node(1) for _ in range(self.tree.prefix.arity-1)]
+            if self.tree.predicate.formation_style=="Infix":
+                self.branches = [self.tree.new_node(size - 2, external_degeneracy)] + [self.tree.new_node(1) for _ in range(self.tree.predicate.arity-1)]
+            else:
+                self.branches = [self.tree.new_node(size, external_degeneracy)]
             self._frozen = False
             self._value = -1 #debugging
             self._reset_caches()
@@ -684,14 +715,13 @@ class TreeForm:
             fill_splits: tuple[tuple[FillPointer, DimensionalReference], ...] = split_fill(fill, self.branch_var_counts)
             branch_calcs: tuple[tuple[ModelArray, DimensionalReference], ...] = tuple([(b.calculate(model, sub_fill), tuple([injection[i] for i in get_fill(sub_fill)])) for b, (sub_fill, injection) in zip(self.branches, fill_splits)])
 
-            res = model.calculate(self.tree.prefix, fill.size, branch_calcs)
+            res = model.calculate(self.tree.predicate, fill.size, branch_calcs)
             assert not isinstance(res, int)
             return res
         
         @property
         def counts(self) -> CountArray:
-            """Count of each lexographical element in this node and all branches
-            """            
+            """Count of each lexographical element in this node and all branches"""            
             if self._count_cache is None:
                 #typing hates this completely valid code
                 if len(self.branches)==0:
@@ -714,7 +744,7 @@ class TreeForm:
             str
                 Polish form
             """            
-            polish = self.tree.prefix.symbol + ''.join(b.polish(None) for b in self.branches)
+            polish = self.tree.predicate.symbol + ''.join(b.polish(None) for b in self.branches)
 
             if fillin is None:
                 return polish
@@ -748,14 +778,14 @@ class TreeForm:
                 Vampire form
             """            
             if self._tptp_cache is None:
-                match self.tree.prefix.formation_style:
+                match self.tree.predicate.formation_style:
                     case "Polish":
-                        self._tptp_cache = self.tree.prefix.tptp_symbol + "(" + ','.join(b.tptp(None) for b in self.branches) + ")"
+                        self._tptp_cache = self.tree.predicate.tptp_symbol + "(" + ','.join(b.tptp(None) for b in self.branches) + ")"
                     case "Infix":
-                         assert self.tree.prefix.arity==2
-                         self._tptp_cache =  self.branches[0].tptp(None) + self.tree.prefix.tptp_symbol + self.branches[1].tptp(None)
+                         assert self.tree.predicate.arity==2
+                         self._tptp_cache =  self.branches[0].tptp(None) + self.tree.predicate.tptp_symbol + self.branches[1].tptp(None)
                     case _:
-                        raise ValueError(self.tree.prefix)
+                        raise ValueError(self.tree.predicate)
             
             if fillin is None:
                 return self._tptp_cache
@@ -783,12 +813,13 @@ class TreeForm:
             TreeForm.Node
                 This node in increasingly iterated forms
             """            
-            yield self
+            if not self._is_degenerate(external_degeneracy):
+                yield self
             while self.iterate(external_degeneracy):
                 yield self
         
         @profile # type: ignore
-        def process(self, model_table: ModelTable, tptp_wrapper: TheoremProverWrapper, remaining_file_handler: Callable[[str], None], progress_tracker: ProgressTracker) -> tuple[int, int]:
+        def process(self, model_table: ModelTable, tptp_wrapper: TheoremProverWrapper, remaining_file_handler: Callable[[str], None], progress_tracker: ProgressTracker, full_verification: bool = False) -> tuple[int, int]:
             """Fully processes this Node in its current state (without iterating it), creating new countermodels using tptp as needed.
             Indeterminate expressions will be placed into the remaining file
 
@@ -802,6 +833,8 @@ class TreeForm:
                 File to place the indeterminate expressions (Tautological but Un-countermodeled) into
             progress_tracker : ProgressTracker
                 Tracker for progress through the calculations
+            full_verification : bool
+                Should full verification be ran. WARNING: VERY VERY VERY VERY VERY SLOW
 
             Returns
             -------
@@ -830,7 +863,7 @@ class TreeForm:
                         fillin: list[Any] = [fill_dims[(j := j + 1)] if k[i]==0 else -k[i] for i in range(var_count)]
                         vamp: str = self.tptp(fillin)
 
-                        if VERIFY_ALL_FORMULAS:
+                        if full_verification:
                             assert not any(cm(vamp) for cm in model_table.counter_models)
                             try:
                                 assert model_table.target_model(vamp), vamp+"\n"+str(i)+"\n"+str(fillin)
@@ -849,9 +882,9 @@ class TreeForm:
                             assert isinstance(tptp_result, Model), "Vampire wrapper shouldn't return True, only models or false."
                             model_table += tptp_result
                             self._process_cleaver_helper(cleaver, tptp_result, "Upward")
-                            if VERIFY_ALL_FORMULAS:
+                            if full_verification:
                                 assert not cleaver.cleaves[k][i]
-                    elif VERIFY_ALL_FORMULAS:
+                    elif full_verification:
                         fill_dims: DimensionalReference = get_fill(fill)
                         j = -1
                         fillin: list[Any] = [fill_dims[(j := j + 1)] if k[i]==0 else -k[i] for i in range(var_count)]
@@ -902,7 +935,7 @@ class TreeForm:
     
 
     def process_tree(self, size: int, model_table: ModelTable, tptp_wrapper: TheoremProverWrapper, remaining_filename: str, 
-                     progress_tracker: ProgressTracker, skip: int | str = 0) -> tuple[int, int]:
+                     progress_tracker: ProgressTracker, skip: int | str = 0, reset_skip: bool = False, full_verification: bool = False) -> tuple[int, int]:
         """Processes this entire Tree species at a particular size into a file
 
         Parameters
@@ -921,6 +954,10 @@ class TreeForm:
             Number of states to skip at the start. Useful for restarting after a keyboard iterrupt or crash. Default 0
             If str, interperted as file, and will load the first line of the file (if it doesn't exist it creates the file with a first line 0)
             as the skip count and continuously update it
+        reset_skip : bool
+            Should skip progress be removed, default = False
+        full_verification : bool
+            Should full verification be ran. WARNING: VERY VERY VERY VERY VERY SLOW
 
         Returns
         -------
@@ -930,22 +967,21 @@ class TreeForm:
         """        
         default_degeneracy: CountArray = np.zeros(len(self.operations)+1, dtype=np.int8)
 
-        i = 0
         if isinstance(skip, str):
             skip_path = Path(skip)
             if not skip_path.parent.exists():
                 skip_path.parent.mkdir(parents=True, exist_ok=True)
-            if not skip_path.exists():
+            if not skip_path.exists() or reset_skip:
                 with open(skip_path, 'w') as skip_file:
                     skip_file.write("0")
             with open(skip_path, 'r+') as skip_file:
-                unsolved_count, total_processed = self._process_tree_internal_loop(size, model_table, tptp_wrapper, remaining_filename, default_degeneracy, progress_tracker, skip_file)
+                unsolved_count, total_processed = self._process_tree_internal_loop(size, model_table, tptp_wrapper, remaining_filename, default_degeneracy, progress_tracker, skip_file, full_verification)
         else:
-            unsolved_count, total_processed = self._process_tree_internal_loop(size, model_table, tptp_wrapper, remaining_filename, default_degeneracy, progress_tracker, skip)
+            unsolved_count, total_processed = self._process_tree_internal_loop(size, model_table, tptp_wrapper, remaining_filename, default_degeneracy, progress_tracker, skip, full_verification)
         
         return unsolved_count, total_processed
 
-    def _process_tree_internal_loop(self, size: int, model_table: ModelTable, tptp_wrapper: TheoremProverWrapper, remaining_filename: str, default_degeneracy: CountArray, progress_tracker: ProgressTracker, skip_value: TextIOWrapper | int = 0) -> tuple[int, int]:
+    def _process_tree_internal_loop(self, size: int, model_table: ModelTable, tptp_wrapper: TheoremProverWrapper, remaining_filename: str, default_degeneracy: CountArray, progress_tracker: ProgressTracker, skip_value: TextIOWrapper | int = 0, full_verification: bool = False) -> tuple[int, int]:
         """Internal helper for process_tree, see above. Forced due to "open" syntax and crash safety.
         """
         unsolved_count: int = 0
@@ -968,7 +1004,7 @@ class TreeForm:
                     cand_count += 1
                 for state in self.TopNode(self, size, default_degeneracy).get_iterator(default_degeneracy):
                     if i >= skip:
-                        new_unsolved, new_processed = state.process(model_table, tptp_wrapper, remaining_file_handler, progress_tracker)
+                        new_unsolved, new_processed = state.process(model_table, tptp_wrapper, remaining_file_handler, progress_tracker, full_verification)
                         unsolved_count += new_unsolved
                         total_processed += new_processed
                     i += 1
@@ -1008,25 +1044,34 @@ class TreeForm:
             return ((tuple([0 for _ in self.operations])+(1,), 1),)
         counts: dict[tuple[int, ...], int] = {}
         for i, op in enumerate(self.operations):
-            for comb in self._node_size_combos(op.arity, size - 1):
-                valid = True
-                for s in comb:
-                    if not self._valid_node_size(s):
-                        valid = False
-                        break
-                if valid:
-                    comb_dicts: list[dict[tuple[int, ...], int]] = [dict(self._formula_count_helper(s)) for s in comb]
-                    for comb_set in itertools.product(*[list(d.items()) for d in comb_dicts]):
-                        new_s_temp = np.sum([np.array(s, dtype=np.int8) for s, c in comb_set], axis=0)
-                        new_s_temp[i] += 1
-                        new_s: tuple[int, ...] = tuple(new_s_temp)
-                        new_c: int = int(np.prod(np.array([c for s, c in comb_set])))
-                        if new_s in counts.keys():
-                            counts[new_s] += new_c
-                        else:
-                            counts[new_s] = new_c
+            for comb in self.valid_node_size_combos(op.arity, size - 1, op.associative):
+                comb_dicts: list[dict[tuple[int, ...], int]] = [dict(self._formula_count_helper(s)) for s in comb]
+                for comb_set in itertools.product(*[list(d.items()) for d in comb_dicts]):
+                    new_s_temp = np.sum([np.array(s, dtype=np.int8) for s, c in comb_set], axis=0)
+                    new_s_temp[i] += 1
+                    new_s: tuple[int, ...] = tuple(new_s_temp)
+                    new_c: int = int(np.prod(np.array([c for s, c in comb_set])))
+                    if new_s in counts.keys():
+                        counts[new_s] += new_c
+                    else:
+                        counts[new_s] = new_c
 
         return tuple(counts.items())
+    
+    def _formula_count_predicate_extension(self, size: int) -> dict[tuple[int, ...], int]:
+        counts: dict[tuple[int, ...], int] = {}
+        for comb in self.valid_node_size_combos(self.predicate.arity, size + 1 - self.predicate.arity, self.predicate.associative):
+            comb_dicts: list[dict[tuple[int, ...], int]] = [dict(self._formula_count_helper(s)) for s in comb]
+            for comb_set in itertools.product(*[list(d.items()) for d in comb_dicts]):
+                new_s_temp = np.sum([np.array(s, dtype=np.int8) for s, c in comb_set], axis=0)
+                new_s: tuple[int, ...] = tuple(new_s_temp)
+                new_c: int = int(np.prod(np.array([c for s, c in comb_set])))
+                if new_s in counts.keys():
+                    counts[new_s] += new_c
+                else:
+                    counts[new_s] = new_c
+
+        return counts
     
     def form_count(self, size: int, allow_degenerate: bool = False) -> int:
         """Calculates the number of formulas there should be of a particular size, not including different variable setups
@@ -1048,7 +1093,7 @@ class TreeForm:
         RuntimeError
             No nondegenerate formulas
         """         
-        res: dict[tuple[int, ...], int] = dict(self._formula_count_helper(size))
+        res: dict[tuple[int, ...], int] = self._formula_count_predicate_extension(size)
         total = 0
         for s, c in res.items():
             if not allow_degenerate and (np.array(s)==0).any():
@@ -1078,7 +1123,7 @@ class TreeForm:
         RuntimeError
             No nondegenerate formulas
         """         
-        res: dict[tuple[int, ...], int] = dict(self._formula_count_helper(size))
+        res: dict[tuple[int, ...], int] = dict(self._formula_count_predicate_extension(size))
         total = 0
         for s, c in res.items():
             if not allow_degenerate and (np.array(s)==0).any():
@@ -1110,17 +1155,13 @@ class TreeForm:
         AssertionError
             If formulas generated are in some way invalid
         """        
-        if self.prefix.mirrored:
-            warnings.warn("WARNING: CANNOT VERIFY FORMULA FOR MIRRORED PREFIXES YET")
-            return
-
-        model: Model = Model(ModelSpec(self.prefix, self.operations, self.constants))
+        model: Model = Model(ModelSpec(self.predicate, self.operations, self.constants))
         
         target_count: int = self.formula_count(size)
 
         default_degeneracy = np.zeros(len(self.operations)+1, dtype=np.int8)
         count = 0
-        expressions: set[str] = set()
+        expressions: list[str] = []
         for state in self.TopNode(self, size, default_degeneracy).get_iterator(default_degeneracy):
             cleaver = CleavingMatrix(state.var_count, len(self.constants))
             count += sum([c.shape[0] for c in cleaver.cleaves.values()])
@@ -1131,14 +1172,22 @@ class TreeForm:
                     j = -1
                     fillin: list[Any] = [fill_dims[(j := j + 1)] if k[i]==0 else -k[i] for i in range(state.var_count)]
                     vamp = state.tptp(fillin)
-                    expressions.add(vamp)
+                    expressions.append(vamp)
                     try:
                         model.compile_expression(vamp)
                     except:
                         raise AssertionError("Unverifiable form: "+vamp)
             #print(vamp)#str(count)+":"+
         
-        assert count == target_count and count == len(expressions), "Counts: "+str(count)+" "+str(target_count)+" "+str(len(expressions))
+        try:
+            assert count == target_count and count == len(set(expressions)), "Counts: "+str(count)+" "+str(target_count)+" "+str(len(set(expressions)))
+        except:
+            print("==========================")
+            print(target_count)
+            print(count)
+            print(len(expressions))
+            print(expressions)
+            raise AssertionError
 
     def dump_formulas(self, size: int) -> None:
         """Dumps unfilled formulas for viewing

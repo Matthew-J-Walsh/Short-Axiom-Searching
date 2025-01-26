@@ -16,14 +16,15 @@
         "arity": 1, 
         "default_table": [false, true],
         "formation_style": "Polish",
-        "mirrored": false
+        "associative": false
     },
     "operators": [
         {
             "symbol": "C", 
             "tptp_symbol": "i", 
             "arity": 2, 
-            "default_table": [[1, 1], [0, 1]]
+            "default_table": [[1, 1], [0, 1]],
+            "associative": false
         }
     ],
     "constants": [

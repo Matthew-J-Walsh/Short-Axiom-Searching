@@ -1,18 +1,24 @@
 import sys
 
 class ProgressTracker:
+    """A progress tracker"""    
     _process: str
+    """Current process being worked on"""
     _formula: str
+    """Current formula being worked on"""
     _progress: int
+    """How far through processing"""
     _bar_size: int
+    """How big of a bar to make"""
     _max: int
+    """Total amount of processes to complete"""
 
-    def __init__(self, max: int):
+    def __init__(self, form_count: int):
         self._process = "Initialized Process Tracker"
         self._formula = "N/A"
         self._progress = 0
         self._bar_size = 20
-        self._max = max
+        self._max = max(form_count, 1)
         self._disabled = not sys.stdout.isatty()
         self._update(True)
     

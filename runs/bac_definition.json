@@ -16,14 +16,15 @@
         "arity": 2, 
         "default_table": null,
         "formation_style": "Infix",
-        "mirrored": true
+        "associative": true
     },
     "operators": [
         {
             "symbol": "C", 
             "tptp_symbol": "i", 
             "arity": 2, 
-            "default_table": [[1, 1], [0, 1]]
+            "default_table": [[1, 1], [0, 1]],
+            "associative": false
         }
     ],
     "constants": []

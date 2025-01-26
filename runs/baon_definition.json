@@ -15,20 +15,22 @@
         "arity": 2, 
         "default_table": null,
         "formation_style": "Infix",
-        "mirrored": true
+        "associative": true
     },
     "operators": [
         {
             "symbol": "D", 
             "tptp_symbol": "o", 
             "arity": 2, 
-            "default_table": [[0, 1], [1, 1]]
+            "default_table": [[0, 1], [1, 1]],
+            "associative": true
         },
         {
             "symbol": "N", 
             "tptp_symbol": "n", 
             "arity": 1, 
-            "default_table": [1, 0]
+            "default_table": [1, 0],
+            "associative": false
         }
     ],
     "constants": []

@@ -50,11 +50,13 @@ class OperationSpec(NamedTuple):
     """Arity of the operation"""
     default_table: ModelArray
     """Default function table"""
+    associative: bool
+    """Is this operation associative"""
     __hash__ = hash_tuple_with_ndarray
 
     @staticmethod
     def parse(inpt: dict) -> "OperationSpec":
-        return OperationSpec(inpt["symbol"], inpt["tptp_symbol"], inpt["arity"], numpy_read_only_array(inpt["default_table"]))
+        return OperationSpec(inpt["symbol"], inpt["tptp_symbol"], inpt["arity"], numpy_read_only_array(inpt["default_table"]), inpt["associative"])
 
 class PredicateSpec(NamedTuple):
     """Specification for a operation
@@ -69,13 +71,13 @@ class PredicateSpec(NamedTuple):
     """Default function table or none if no default"""
     formation_style: str
     """How formulas are formed around this prefix, polish for 'F(x)', infix for 'x=x'"""
-    mirrored: bool
-    """Is this operation mirroring"""
+    associative: bool
+    """Is this operation associative"""
     __hash__ = hash_tuple_with_ndarray
 
     @staticmethod
     def parse(inpt: dict) -> "PredicateSpec":
-        return PredicateSpec(inpt["symbol"], inpt["tptp_symbol"], inpt["arity"], numpy_read_only_array(inpt["default_table"], dtype=np.bool_), inpt["formation_style"], inpt["mirrored"])
+        return PredicateSpec(inpt["symbol"], inpt["tptp_symbol"], inpt["arity"], inpt["default_table"] if inpt["default_table"] is None else numpy_read_only_array(inpt["default_table"], dtype=np.bool_), inpt["formation_style"], inpt["associative"])
 
 class ConstantSpec(NamedTuple):
     """Specification for a constant
@@ -128,9 +130,5 @@ def numpy_read_only_array(*args, dtype: type = np.int8) -> np.ndarray:
     arr = np.array(*args, dtype=dtype)
     arr.setflags(write=False)
     return arr
-
-
-VERIFY_ALL_FORMULAS: bool = False
-"""Should all formulas be checked (takes a very long time)"""
 
 

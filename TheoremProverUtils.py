@@ -64,14 +64,14 @@ class TheoremProverWrapper:
         Parameters
         ----------
         tptp_form : str
-            _description_
+            Candidate to encapsulate
         i : int
-            _description_
+            Candidate number
 
         Returns
         -------
         str
-            _description_
+            fof form of candidate
         """        
         return self._fof_formula_to_fof_line(tptp_form, "cand"+str(i), "axiom")
     
@@ -89,6 +89,8 @@ class TheoremProverWrapper:
         ----------
         remaining_file_name : str
             Location of the remaining formulas
+        target_file_name : str | None
+            File to put remaining formulas, None (default) = overwrite remaining file
         """        
         if target_file_name is None:
             target_file_name = remaining_file_name
@@ -161,6 +163,18 @@ class VampireWrapper(TheoremProverWrapper):
         self.verification = verify_models
 
     def _generate_tptp_input_file(self, tptp_form: str) -> str:
+        """Generates an input file for vampire given a candidate
+
+        Parameters
+        ----------
+        tptp_form : str
+            TPTP form of the candidate
+
+        Returns
+        -------
+        str
+            Filename of the input file
+        """        
         if not os.path.exists("input_tmp"):
             os.makedirs("input_tmp")
 
@@ -243,19 +257,30 @@ class VampireWrapper(TheoremProverWrapper):
                 if self.verification:
                     assert model(tptp_form), str(model)+"\n"+tptp_form
 
-                os.remove(input_file_name)
+                #os.remove(input_file_name)
                 return model
                 
         return False
         
 class Prover9Wrapper(TheoremProverWrapper):
-    preamble: str
-
+    """Wrapper for the Prover9 theorem prover"""    
     def __init__(self, executable_location: str, model_spec: ModelSpec, template: str, equational: bool = False):
-        self.preamble = "set(auto).\nset(prolog_style_variables).\nassign(max_weight,48).\nassign(max_vars,8).\nset(restrict_denials).\nassign(max_given,300).\n\nformulas(usable).\ni(i(c1,c2),c1) != c1.\nend_of_list."
+        template = "set(auto).\nset(prolog_style_variables).\nassign(max_weight,48).\nassign(max_vars,8).\nset(restrict_denials).\nassign(max_given,300).\n\nformulas(usable).\ni(i(c1,c2),c1) != c1.\nend_of_list."
         super().__init__(executable_location, model_spec, template, equational)
 
     def _generate_prover9_input_file(self, tptp_form: str) -> str:
+        """Generates a input file for prover9 for a candidate
+
+        Parameters
+        ----------
+        tptp_form : str
+            TPTP form of the candidate
+
+        Returns
+        -------
+        str
+            Filename of the input file
+        """        
         if not os.path.exists("input_tmp"):
             os.makedirs("input_tmp")
 
@@ -264,7 +289,7 @@ class Prover9Wrapper(TheoremProverWrapper):
             file_name = file_name.replace(i, '')
         file_name += '.in'
 
-        contents: str = self.preamble+"\n\n"
+        contents: str = self.template+"\n\n"
         contents += "formulas(sos).\n"
         contents += tptp_form+".\n"
         contents += "end_of_list."
@@ -275,12 +300,12 @@ class Prover9Wrapper(TheoremProverWrapper):
         return file_name
 
     def __call__(self, tptp_form: str) -> bool | Model:
-        """Runs the prover9 theorem prover on the given formula
+        """Runs the prover9 theorem prover on the given candidate
 
         Parameters
         ----------
         tptp_form : str
-            TPTP form of the formula
+            TPTP form of the candidate
 
         Returns
         -------
@@ -298,8 +323,7 @@ class Prover9Wrapper(TheoremProverWrapper):
 
 
 class BlankTheoremProverWrapper(TheoremProverWrapper):
-    """TheoremProverWrapper that returns False always
-    """    
+    """TheoremProverWrapper that returns False always"""    
     def __init__(self, *args) -> None:
         pass
 

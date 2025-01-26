@@ -1,13 +1,11 @@
 {
-    "name": "BAAN",
+    "name": "BACN",
     "counter_modeling_formulas": [
-        "a(P,a(Q,R))=a(Q,a(R,P))",
-        "a(P,P)=P",
-        "a(P,n(a(P,n(Q))))=a(P,Q)",
-        "a(P,n(P))=a(Q,n(Q))"
+        "i(n(X),i(Y,Z))=i(i(Z,X),i(Y,X))",
+        "i(i(X,Y),X)=X"
     ],
     "vampire_template": [
-        "fof(known,conjecture,![P,Q,R]: (a(P,a(Q,R))=a(Q,a(R,P))) & (a(P,P)=P) & (a(P,n(a(P,n(Q))))=a(P,Q)) & (a(P,n(P))=a(Q,n(Q))))."
+        "fof(known,conjecture,![X,Y,Z]: (i(n(X),i(Y,Z))=i(i(Z,X),i(Y,X))) & (i(i(X,Y),X)=X))."
     ],
     "prover9_template": [
 
@@ -18,20 +16,22 @@
         "arity": 2, 
         "default_table": null,
         "formation_style": "Infix",
-        "mirrored": true
+        "associative": true
     },
     "operators": [
         {
             "symbol": "C", 
-            "tptp_symbol": "a", 
+            "tptp_symbol": "i", 
             "arity": 2, 
-            "default_table": [[0, 0], [0, 1]]
+            "default_table": [[1, 1], [0, 1]],
+            "associative": false
         },
         {
             "symbol": "N", 
             "tptp_symbol": "n", 
             "arity": 1, 
-            "default_table": [1, 0]
+            "default_table": [1, 0],
+            "associative": false
         }
     ],
     "constants": []

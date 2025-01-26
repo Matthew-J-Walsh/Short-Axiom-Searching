@@ -67,10 +67,14 @@ class CleavingMatrix:
 
         Returns
         -------
-        np.ndarray
+        CleavingArray Array
             Base cleaver (all 1s)
         """    
         return np.zeros(bells(size), dtype=np.bool_)
+    
+    @staticmethod
+    def limited_inverted_cleaver(var_count: int, unique_count: int) -> CleavingArray:
+        return np.any(_fill_table_fills[:,:bells(var_count)] > unique_count, axis=0)
     
     def __imul__(self, other: CleavingMatrix) -> CleavingMatrix:
         assert self.full_size == other.full_size
@@ -322,7 +326,7 @@ class SubsumptiveTable:
         #self.col_wise = sp.csc_matrix(arr, dtype=bool)
 
     #@profile #type: ignore
-    def fill_downward_cleave(self, fill: FillPointer) -> np.ndarray[Any, np.dtype[np.bool_]]:
+    def fill_downward_cleave(self, fill: FillPointer) -> CleavingArray:
         """Calculates a downward cleave at a point. 
         This corresponds to finding out that point i is non-tautological so all fills that imply it are also non-tautological
 
@@ -335,18 +339,18 @@ class SubsumptiveTable:
 
         Returns
         -------
-        np.ndarray
+        CleavingArray
             Downward Cleave
         """
         assert fill.idx < self.shape[0], str(fill.idx) + ", " + str(self.shape)
-        out = np.zeros(bells(fill.size), dtype=np.bool_)
+        out: CleavingArray = CleavingMatrix.base_inverted_cleaver(fill.size)
         list_point = self.col_indexing_list[fill.idx]
         out[list_point[list_point < bells(fill.size)]] = 1
         return out
         #return self.col_wise[fill.point, :bells(fill.size)] # type: ignore
 
     #@profile #type: ignore
-    def fill_upward_cleave(self, fill: FillPointer) -> np.ndarray[Any, np.dtype[np.bool_]]:
+    def fill_upward_cleave(self, fill: FillPointer) -> CleavingArray:
         """Calculates an upward cleave at a point. 
         This corresponds to finding out that point i is tautological so all fills that imply it are also tautological
 
@@ -359,11 +363,11 @@ class SubsumptiveTable:
 
         Returns
         -------
-        np.ndarray
+        CleavingArray
             Upward Cleave
         """
         assert fill.idx < self.shape[1], str(fill.idx) + ", " + str(self.shape)
-        out = np.zeros(bells(fill.size), dtype=np.bool_)
+        out: CleavingArray = CleavingMatrix.base_inverted_cleaver(fill.size)
         out[self.row_indexing_list[fill.idx]] = 1
         return out
         #return self.col_wise[:bells(fill.size), fill.point] # type: ignore
@@ -396,7 +400,7 @@ class SubsumptiveTableSlow:
         #self.col_wise = sp.csc_matrix(arr, dtype=bool)
 
     @profile #type: ignore
-    def fill_downward_cleave_old(self, fill: FillPointer) -> np.ndarray[Any, np.dtype[np.bool_]]:
+    def fill_downward_cleave_old(self, fill: FillPointer) -> CleavingArray:
         """Calculates a downward cleave at a point. 
         This corresponds to finding out that point i is non-tautological so all fills that imply it are also non-tautological
 
@@ -427,7 +431,7 @@ class SubsumptiveTableSlow:
         return out
     
     @profile #type: ignore
-    def fill_downward_cleave(self, fill: FillPointer) -> np.ndarray[Any, np.dtype[np.bool_]]:
+    def fill_downward_cleave(self, fill: FillPointer) -> CleavingArray:
         """Calculates a downward cleave at a point. 
         This corresponds to finding out that point i is non-tautological so all fills that imply it are also non-tautological
 
@@ -462,7 +466,7 @@ class SubsumptiveTableSlow:
         return out
     
     @profile #type: ignore
-    def fill_downward_cleave_carry(self, arr: np.ndarray[Any, np.dtype[np.bool_]], fill: FillPointer) -> None:
+    def fill_downward_cleave_carry(self, arr: CleavingArray, fill: FillPointer) -> None:
         assert fill.idx < self.shape[0], str(fill.idx) + ", " + str(self.shape)
         size_limit = bells(fill.size)
         queue: deque[int] = deque(self.col_indexing_list[fill.idx])
@@ -475,7 +479,7 @@ class SubsumptiveTableSlow:
                 queue.extend(self.col_indexing_list[i])
 
     @profile #type: ignore
-    def fill_upward_cleave(self, fill: FillPointer) -> np.ndarray[Any, np.dtype[np.bool_]]:
+    def fill_upward_cleave(self, fill: FillPointer) -> CleavingArray:
         """Calculates an upward cleave at a point. 
         This corresponds to finding out that point i is tautological so all fills that imply it are also tautological
 
@@ -488,11 +492,11 @@ class SubsumptiveTableSlow:
 
         Returns
         -------
-        np.ndarray
+        CleavingArray
             Upward Cleave
         """
         assert fill.idx < self.shape[1], str(fill.idx) + ", " + str(self.shape)
-        out = np.zeros(bells(fill.size), dtype=np.bool_)
+        out: CleavingArray = CleavingMatrix.base_inverted_cleaver(fill.size)
         queue: deque[int] = deque(self.row_indexing_list[fill.idx])
         while len(queue)>0:
             i: int = queue.popleft()
@@ -623,7 +627,7 @@ def full_fill(size: int) -> FillPointer:
     _initialize_fill_table(size)
     return FillPointer(bells(size)-1, size)
 
-def fill_downward_cleave(fill: FillPointer) -> np.ndarray[Any, np.dtype[np.bool_]]:
+def fill_downward_cleave(fill: FillPointer) -> CleavingArray:
     """Calculates a downward cleave at a point. 
     This corresponds to finding out that point i is non-tautological so all fills that imply it are also non-tautological
 
@@ -641,10 +645,10 @@ def fill_downward_cleave(fill: FillPointer) -> np.ndarray[Any, np.dtype[np.bool_
     """
     return _fill_table_subsumptive_table.fill_downward_cleave(fill)
 
-#def fill_downward_cleave_carry(arr: np.ndarray[Any, np.dtype[np.bool_]], fill: FillPointer) -> None:
+#def fill_downward_cleave_carry(arr: CleavingArray, fill: FillPointer) -> None:
 #    _fill_table_subsumptive_table.fill_downward_cleave_carry(arr, fill)
 
-def fill_upward_cleave(fill: FillPointer) -> np.ndarray[Any, np.dtype[np.bool_]]:
+def fill_upward_cleave(fill: FillPointer) -> CleavingArray:
     """Calculates an upward cleave at a point. 
     This corresponds to finding out that point i is tautological so all fills that imply it are also tautological
 
@@ -688,7 +692,7 @@ def fill_result_disassembly_application(evaluation: ModelArray, constants: Seque
 
     for constant_specifier, fills in fill_pairings.items():
         var_count: int = constant_specifier.count(0)
-        inverted_cleaver = np.zeros(bells(var_count), dtype=np.bool_)
+        inverted_cleaver: CleavingArray = cleavematrix.base_inverted_cleaver(var_count) #cleavematrix.limited_inverted_cleaver(var_count, 5)
         sorted_fills: list[FillPointer] = sorted(fills, key = lambda f: f.idx, reverse = cleave_direction == "Upward")
         for fill in sorted_fills:
             if inverted_cleaver[fill.idx]==0:
