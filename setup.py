@@ -2,6 +2,7 @@ import os
 import stat
 import subprocess
 import urllib.request
+import shutil
 from setuptools import setup
 from setuptools.command.install import install
 
@@ -43,12 +44,15 @@ class SASInstallCommand(install):
         print(f"Setting executable permissions for {PROVER9_TARGET_PATH}")
         os.chmod(PROVER9_TARGET_PATH, stat.S_IXUSR | stat.S_IRUSR | stat.S_IWUSR)
 
+        #print(f"Removing Prover9 clone {PROVER9_CLONE_PATH}")
+        #shutil.rmtree(PROVER9_CLONE_PATH)
+
         print("Prover9 fully setup.")
 
 setup(
-    name="ShortAxiomSearching",
+    name="Short-Axiom-Searching",
     version="0.0.0",
-    packages=["ShortAxiomSearching"],
+    packages=["Short-Axiom-Searching"],
     include_package_data=True,
     install_requires=[
         "numpy",
@@ -56,9 +60,6 @@ setup(
     ],
     cmdclass={
         'install': SASInstallCommand
-    },
-    package_data={
-        "ShortAxiomSearching": ["theorem_provers/vampire", "theorem_provers/prover9"]
     },
     description="Methods for discovering short axioms in finite modeled logics.",
     author="Matthew Walsh",
