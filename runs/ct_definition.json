@@ -6,7 +6,7 @@
     "vampire_template": [
         "fof(mp,axiom,![X,Y]: ((t(X) & t(i(X,Y))) => t(Y))).",
         "fof(known,conjecture,![X,Y,Z,U,V]: t(i(i(i(X,Y),i(o,Z)),i(U,i(i(Z,X),i(V,i(W,X))))))).",
-        "fof(const,axiom,![]: t(o))."
+        "fof(const,axiom, t(o))."
     ],
     "prover9_template": [
 

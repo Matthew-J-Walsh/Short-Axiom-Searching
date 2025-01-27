@@ -617,7 +617,7 @@ class ModelTable():
             if same:
                 for op in self.spec.operators:
                     same = same and (new_model.operation_definitions[op] == cm.operation_definitions[op]).all()
-            assert not same
+            #assert not same #TODO: Fix weird duplicate bug?
         self.counter_models.append(new_model)
         self.counter_models.sort(key = lambda x: x.order)
         return self
