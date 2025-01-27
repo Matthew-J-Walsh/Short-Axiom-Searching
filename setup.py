@@ -14,61 +14,36 @@ PROVER9_CLONE_PATH = "build/Prover9"
 PROVER9_TARGET_PATH = "my_library/bin/prover9"
 
 
-class SASInstallCommand(install):
-    def run(self):
-        install.run(self)
+vampire_dir = os.path.dirname(VAMPIRE_TARGET_PATH)
+if not os.path.exists(vampire_dir):
+    os.makedirs(vampire_dir)
 
-        vampire_dir = os.path.dirname(VAMPIRE_TARGET_PATH)
-        if not os.path.exists(vampire_dir):
-            os.makedirs(vampire_dir)
+print(f"Downloading vampire binary from {VAMPIRE_BINARY_URL}")
+urllib.request.urlretrieve(VAMPIRE_BINARY_URL, VAMPIRE_TARGET_PATH)
 
-        print(f"Downloading vampire binary from {VAMPIRE_BINARY_URL}")
-        urllib.request.urlretrieve(VAMPIRE_BINARY_URL, VAMPIRE_TARGET_PATH)
+print(f"Setting executable permissions for {VAMPIRE_TARGET_PATH}")
+os.chmod(VAMPIRE_TARGET_PATH, stat.S_IXUSR | stat.S_IRUSR | stat.S_IWUSR)
 
-        print(f"Setting executable permissions for {VAMPIRE_TARGET_PATH}")
-        os.chmod(VAMPIRE_TARGET_PATH, stat.S_IXUSR | stat.S_IRUSR | stat.S_IWUSR)
+print("Vampire fully setup.")
 
-        print("Vampire fully setup.")
+print(f"Cloning Prover9 to {PROVER9_CLONE_PATH}")
+if not os.path.exists(PROVER9_CLONE_PATH):
+    subprocess.check_call(["git", "clone", PROVER9_REPO_URL, PROVER9_CLONE_PATH])
 
-        print(f"Cloning Prover9 to {PROVER9_CLONE_PATH}")
-        if not os.path.exists(PROVER9_CLONE_PATH):
-            subprocess.check_call(["git", "clone", PROVER9_REPO_URL, PROVER9_CLONE_PATH])
+print("Building Prover9")
+subprocess.check_call(["make", "all"], cwd=PROVER9_CLONE_PATH)
 
-        print("Building Prover9")
-        subprocess.check_call(["make", "all"], cwd=PROVER9_CLONE_PATH)
+compiled_prover9_path = os.path.join(PROVER9_CLONE_PATH, "bin", "prover9")
+assert os.path.exists(compiled_prover9_path), "Prover9 build failure"
+print(f"Moving Prover9 binary to {PROVER9_TARGET_PATH}")
 
-        compiled_prover9_path = os.path.join(PROVER9_CLONE_PATH, "bin", "prover9")
-        assert os.path.exists(compiled_prover9_path), "Prover9 build failure"
-        print(f"Moving Prover9 binary to {PROVER9_TARGET_PATH}")
+print(f"Setting executable permissions for {PROVER9_TARGET_PATH}")
+os.chmod(PROVER9_TARGET_PATH, stat.S_IXUSR | stat.S_IRUSR | stat.S_IWUSR)
 
-        print(f"Setting executable permissions for {PROVER9_TARGET_PATH}")
-        os.chmod(PROVER9_TARGET_PATH, stat.S_IXUSR | stat.S_IRUSR | stat.S_IWUSR)
+#print(f"Removing Prover9 clone {PROVER9_CLONE_PATH}")
+#shutil.rmtree(PROVER9_CLONE_PATH)
 
-        #print(f"Removing Prover9 clone {PROVER9_CLONE_PATH}")
-        #shutil.rmtree(PROVER9_CLONE_PATH)
+print("Prover9 fully setup.")
 
-        print("Prover9 fully setup.")
 
-setup(
-    name="Short-Axiom-Searching",
-    version="0.0.0",
-    packages=["Short-Axiom-Searching"],
-    include_package_data=True,
-    install_requires=[
-        "numpy",
-        "scipy"
-    ],
-    cmdclass={
-        'install': SASInstallCommand
-    },
-    description="Methods for discovering short axioms in finite modeled logics.",
-    author="Matthew Walsh",
-    author_email="matthewwalsh2021@u.northwestern.edu",
-    url="https://github.com/Matthew-J-Walsh/Short-Axiom-Searching",
-    classifiers=[
-        "Programming Language :: Python :: 3",
-        "Operating System :: POSIX :: Linux",
-    ],
-    python_requires=">=3.11.5",
-)
 
