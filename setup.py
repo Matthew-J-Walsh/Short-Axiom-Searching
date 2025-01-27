@@ -12,7 +12,7 @@ parser = argparse.ArgumentParser(description="Setup for Short Axiom Searching")
 
 parser.add_argument("--skip_vampire", action='store_true', help="Skip installing vampire")
 parser.add_argument("--skip_prover9", action='store_true', help="Skip installing prover9")
-parser.add_argument("--include_libraries", action='store_false', help="Including installing and updating numpy and scipy")
+parser.add_argument("--include_libraries", action='store_true', help="Including installing and updating numpy and scipy")
 
 args = parser.parse_args()
 
