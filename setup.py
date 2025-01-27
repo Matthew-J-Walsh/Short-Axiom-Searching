@@ -1,10 +1,17 @@
 import os
+import sys
 import stat
 import subprocess
 import urllib.request
 import shutil
+import argparse
 from setuptools import setup
 from setuptools.command.install import install
+
+parser = argparse.ArgumentParser(description="Setup for Short Axiom Searching")
+
+parser.add_argument("--skip_vampire", action='store_true', help="Skip installing vampire")
+parser.add_argument("--skip_prover9", action='store_true', help="Skip installing prover9")
 
 
 VAMPIRE_BINARY_URL = "https://github.com/vprover/vampire/releases/download/v4.9casc2024/vampire"
@@ -46,5 +53,11 @@ os.chmod(PROVER9_TARGET_PATH, stat.S_IXUSR | stat.S_IRUSR | stat.S_IWUSR)
 
 print("Prover9 fully setup.")
 
+print("Installing scipy and numpy.")
+
+subprocess.check_call([sys.executable, "-m", "pip", "install", "--upgrade", "numpy"])
+subprocess.check_call([sys.executable, "-m", "pip", "install", "--upgrade", "scipy"])
+
+print("Setup complete.")
 
 
