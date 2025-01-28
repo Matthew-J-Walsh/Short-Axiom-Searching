@@ -68,7 +68,7 @@ class TreeForm:
         raise RuntimeError
         
     @staticmethod
-    def _node_size_combos(remaining_slots: int, remaining_size: int, associative: bool = False) -> Iterable[tuple[int, ...]]:
+    def _node_size_combos(remaining_slots: int, remaining_size: int) -> Iterable[tuple[int, ...]]:
         """Helper function for valid node size computation
 
         Parameters
@@ -77,8 +77,6 @@ class TreeForm:
             Remaining number of node size groupings
         remaining_size : int
             Remaining number of subnodes to place into groupings
-        associative : bool, optional
-            Is the function associative, if so only allow decrementing combos. Assumed to be False
 
         Yields
         ------
@@ -89,12 +87,25 @@ class TreeForm:
             yield (remaining_size, )
         else:
             for i in range(1, remaining_size + 1 - remaining_slots + 1):
-                for comb in TreeForm._node_size_combos(remaining_slots - 1, remaining_size - i, associative):
-                    if not associative or i >= comb[0]:
-                        yield (i,) + comb
+                for comb in TreeForm._node_size_combos(remaining_slots - 1, remaining_size - i):
+                    yield (i,) + comb
 
-    def valid_node_size_combos(self, remaining_slots: int, remaining_size: int, associative: bool = False) -> Iterable[tuple[int, ...]]:
-        for comb in self._node_size_combos(remaining_slots, remaining_size, associative):
+    def valid_node_size_combos(self, remaining_slots: int, remaining_size: int) -> Iterable[tuple[int, ...]]:
+        """Returns an iterable of node size tuples
+
+        Parameters
+        ----------
+        remaining_slots : int
+            Number of slots left to fill
+        remaining_size : int
+            Number of symbols left to allocate
+
+        Yields
+        ------
+        Iterator[Iterable[tuple[int, ...]]]
+            Each tuple must contain only valid node sizes, the sum of each tuple must equal remaining_size, and the tuple must be remaining_slots long. Yields all such
+        """        
+        for comb in self._node_size_combos(remaining_slots, remaining_size):
             valid = True
             for s in comb:
                 if not self._valid_node_size(s):
@@ -121,7 +132,7 @@ class TreeForm:
             return True
         
         for op in self.operations:
-            for comb in self._node_size_combos(op.arity, size - 1, op.associative):
+            for comb in self._node_size_combos(op.arity, size - 1):
                 valid = True
                 for s in comb:
                     if not self._valid_node_size(s):
@@ -329,9 +340,7 @@ class TreeForm:
             bool
                 If the tree will be degenerate or not
             """           
-            if isinstance(self, TreeForm.TopNode) and self.tree.predicate.associative and self.branches[0].size < self.branches[1].size:
-                return True
-            if self.tree.operations[self._value].associative and any(self.branches[i].size < self.branches[i + 1].size for i in range(len(self.branches) - 1)):
+            if isinstance(self, TreeForm.TopNode) and self.tree.predicate.symbol == "=" and self.branches[1].size > 1:
                 return True
             return bool((external_degeneracy + self.counts <= 0).any())
         
@@ -566,26 +575,6 @@ class TreeForm:
                 Result array
             """            
             return self.cache[self.point].calculate(model, fill)
-
-        def _is_degenerate(self, external_degeneracy: CountArray) -> bool:
-            """Determines if this Node's current value will cause the entire Tree to be degenerate, 
-            lacking atleast one lexographical element
-
-            Parameters
-            ----------
-            external_degeneracy : CountArray
-                Amount of each symbol in external elements, used to prevent degenerate formulas (formulas missing atleast one symbol of the logic)
-
-            Returns
-            -------
-            bool
-                If the tree will be degenerate or not
-            """           
-            if isinstance(self, TreeForm.TopNode) and self.tree.predicate.associative and self.cache[self.point].branches[0].size < self.cache[self.point].branches[1].size:
-                return True
-            if self.tree.operations[self.cache[self.point]._value].associative and any(self.cache[self.point].branches[i].size < self.cache[self.point].branches[i + 1].size for i in range(len(self.cache[self.point].branches) - 1)):
-                return True
-            return bool((external_degeneracy + self.counts <= 0).any())
 
         def iterate(self, external_degeneracy: CountArray) -> bool:
             """Iterates self until its non-degenerate (if possible)
@@ -1044,7 +1033,7 @@ class TreeForm:
             return ((tuple([0 for _ in self.operations])+(1,), 1),)
         counts: dict[tuple[int, ...], int] = {}
         for i, op in enumerate(self.operations):
-            for comb in self.valid_node_size_combos(op.arity, size - 1, op.associative):
+            for comb in self.valid_node_size_combos(op.arity, size - 1):
                 comb_dicts: list[dict[tuple[int, ...], int]] = [dict(self._formula_count_helper(s)) for s in comb]
                 for comb_set in itertools.product(*[list(d.items()) for d in comb_dicts]):
                     new_s_temp = np.sum([np.array(s, dtype=np.int8) for s, c in comb_set], axis=0)
@@ -1060,16 +1049,17 @@ class TreeForm:
     
     def _formula_count_predicate_extension(self, size: int) -> dict[tuple[int, ...], int]:
         counts: dict[tuple[int, ...], int] = {}
-        for comb in self.valid_node_size_combos(self.predicate.arity, size + 1 - self.predicate.arity, self.predicate.associative):
-            comb_dicts: list[dict[tuple[int, ...], int]] = [dict(self._formula_count_helper(s)) for s in comb]
-            for comb_set in itertools.product(*[list(d.items()) for d in comb_dicts]):
-                new_s_temp = np.sum([np.array(s, dtype=np.int8) for s, c in comb_set], axis=0)
-                new_s: tuple[int, ...] = tuple(new_s_temp)
-                new_c: int = int(np.prod(np.array([c for s, c in comb_set])))
-                if new_s in counts.keys():
-                    counts[new_s] += new_c
-                else:
-                    counts[new_s] = new_c
+        comb: tuple[int,...] = (size - 2, 1) if self.predicate.symbol == "=" else (size,)
+
+        comb_dicts: list[dict[tuple[int, ...], int]] = [dict(self._formula_count_helper(s)) for s in comb]
+        for comb_set in itertools.product(*[list(d.items()) for d in comb_dicts]):
+            new_s_temp = np.sum([np.array(s, dtype=np.int8) for s, c in comb_set], axis=0)
+            new_s: tuple[int, ...] = tuple(new_s_temp)
+            new_c: int = int(np.prod(np.array([c for s, c in comb_set])))
+            if new_s in counts.keys():
+                counts[new_s] += new_c
+            else:
+                counts[new_s] = new_c
 
         return counts
     

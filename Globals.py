@@ -50,13 +50,11 @@ class OperationSpec(NamedTuple):
     """Arity of the operation"""
     default_table: ModelArray
     """Default function table"""
-    associative: bool
-    """Is this operation associative"""
     __hash__ = hash_tuple_with_ndarray
 
     @staticmethod
     def parse(inpt: dict) -> "OperationSpec":
-        return OperationSpec(inpt["symbol"], inpt["tptp_symbol"], inpt["arity"], numpy_read_only_array(inpt["default_table"]), inpt["associative"])
+        return OperationSpec(inpt["symbol"], inpt["tptp_symbol"], inpt["arity"], numpy_read_only_array(inpt["default_table"]))
 
 class PredicateSpec(NamedTuple):
     """Specification for a operation
@@ -71,13 +69,11 @@ class PredicateSpec(NamedTuple):
     """Default function table or none if no default"""
     formation_style: str
     """How formulas are formed around this prefix, polish for 'F(x)', infix for 'x=x'"""
-    associative: bool
-    """Is this operation associative"""
     __hash__ = hash_tuple_with_ndarray
 
     @staticmethod
     def parse(inpt: dict) -> "PredicateSpec":
-        return PredicateSpec(inpt["symbol"], inpt["tptp_symbol"], inpt["arity"], inpt["default_table"] if inpt["default_table"] is None else numpy_read_only_array(inpt["default_table"], dtype=np.bool_), inpt["formation_style"], inpt["associative"])
+        return PredicateSpec(inpt["symbol"], inpt["tptp_symbol"], inpt["arity"], inpt["default_table"] if inpt["default_table"] is None else numpy_read_only_array(inpt["default_table"], dtype=np.bool_), inpt["formation_style"])
 
 class ConstantSpec(NamedTuple):
     """Specification for a constant
@@ -88,12 +84,10 @@ class ConstantSpec(NamedTuple):
     """Symbol of the operation in tptp"""
     default_value: int
     """Default constant value"""
-    predicate_orientation: bool | None
-    """What value the predicate of this constant should be, if any"""
 
     @staticmethod
     def parse(inpt: dict) -> "ConstantSpec":
-        return ConstantSpec(inpt["symbol"], inpt["tptp_symbol"], inpt["default_value"], inpt["predicate_orientation"])
+        return ConstantSpec(inpt["symbol"], inpt["tptp_symbol"], inpt["default_value"])
 
 class ModelSpec(NamedTuple):
     """Spec for a model operators and constants for loading from a file"""    

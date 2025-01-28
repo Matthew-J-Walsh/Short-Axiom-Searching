@@ -16,24 +16,21 @@
         "tptp_symbol": "t", 
         "arity": 1, 
         "default_table": [false, true],
-        "formation_style": "Polish",
-        "associative": false
+        "formation_style": "Polish"
     },
     "operators": [
         {
             "symbol": "C", 
             "tptp_symbol": "i", 
             "arity": 2, 
-            "default_table": [[1, 1], [0, 1]],
-            "associative": false
+            "default_table": [[1, 1], [0, 1]]
         }
     ],
     "constants": [
         {
             "symbol": "F",
             "tptp_symbol": "f",
-            "default_value": 0,
-            "predicate_orientation": false
+            "default_value": 0
         }
     ]
 }

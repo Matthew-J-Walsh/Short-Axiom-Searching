@@ -15,24 +15,21 @@
         "tptp_symbol": "=", 
         "arity": 2, 
         "default_table": null,
-        "formation_style": "Infix",
-        "associative": true
+        "formation_style": "Infix"
     },
     "operators": [
         {
             "symbol": "C", 
             "tptp_symbol": "i", 
             "arity": 2, 
-            "default_table": [[1, 1], [0, 1]],
-            "associative": false
+            "default_table": [[1, 1], [0, 1]]
         }
     ],
     "constants": [
         {
             "symbol": "F",
             "tptp_symbol": "f",
-            "default_value": 0,
-            "predicate_orientation": false
+            "default_value": 0
         }
     ]
 }

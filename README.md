@@ -8,11 +8,17 @@ Used to prove that Meredith's 19-symbol single axioms of classical sentential lo
 
 Original preprint: http://fitelson.org/walsh.pdf
 
-## Setup
+## Installation
+
+```git clone https://github.com/Matthew-J-Walsh/Short-Axiom-Searching```
+
+```cd Short-Axiom-Searching```
 
 ```python setup.py```
 
-## Testing
+Use "python setup.py --include_libraries" if you have a fresh python install without numpy and scipy
+
+Testing with:
 
 ```python test.py```
 
@@ -20,7 +26,7 @@ Original preprint: http://fitelson.org/walsh.pdf
 
 ```python run.py CN 21 runs/cn_definition.json```
 
-```python run.py C0 19 runs/c0_definition.json```
+```python run.py CT 19 runs/ct_definition.json```
 
 ```python run.py BACN 17 runs/bacn_definition.json```
 

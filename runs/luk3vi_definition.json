@@ -19,23 +19,20 @@
         "tptp_symbol": "t", 
         "arity": 1, 
         "default_table": [false, false, true],
-        "formation_style": "Polish",
-        "associative": false
+        "formation_style": "Polish"
     },
     "operators": [
         {
             "symbol": "C", 
             "tptp_symbol": "i", 
             "arity": 2, 
-            "default_table": [[2, 2, 2], [1, 2, 2], [0, 1, 2]],
-            "associative": false
+            "default_table": [[2, 2, 2], [1, 2, 2], [0, 1, 2]]
         },
         {
             "symbol": "N", 
             "tptp_symbol": "n", 
             "arity": 1, 
-            "default_table": [2, 1, 0],
-            "associative": false
+            "default_table": [2, 1, 0]
         }
     ],
     "constants": []

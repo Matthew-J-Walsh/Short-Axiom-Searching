@@ -14,23 +14,20 @@
         "tptp_symbol": "=", 
         "arity": 2, 
         "default_table": null,
-        "formation_style": "Infix",
-        "associative": true
+        "formation_style": "Infix"
     },
     "operators": [
         {
             "symbol": "D", 
             "tptp_symbol": "o", 
             "arity": 2, 
-            "default_table": [[0, 1], [1, 1]],
-            "associative": true
+            "default_table": [[0, 1], [1, 1]]
         },
         {
             "symbol": "N", 
             "tptp_symbol": "n", 
             "arity": 1, 
-            "default_table": [1, 0],
-            "associative": false
+            "default_table": [1, 0]
         }
     ],
     "constants": []
